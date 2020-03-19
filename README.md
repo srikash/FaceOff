@@ -24,4 +24,3 @@ Avants, Brian; Tustison, Nick (2018): ANTs/ANTsR Brain Templates. figshare. Data
 
 #### Face-OFF
 ![face_off](https://gitlab.com/skash/images-and-gifs/-/raw/master/face-off/1_face_off.png)
-*Face-OFF*
