@@ -17,11 +17,11 @@ Avants, Brian; Tustison, Nick (2018): ANTs/ANTsR Brain Templates. figshare. Data
 
 ## Example use
 
-![face_on](https://gitlab.com/skash/images-and-gifs/-/raw/master/face-off/0_face_on.png)
-*Fig. 1: Face-ON*
-
 `FaceOff -i sub-01-mp2rage-t1w.nii.gz -n 12`
 
-![face_off](https://gitlab.com/skash/images-and-gifs/-/raw/master/face-off/1_face_off.png)
-*Fig. 1: Face-OFF*
+#### Face-ON
+![face_on](https://gitlab.com/skash/images-and-gifs/-/raw/master/face-off/0_face_on.png)
 
+#### Face-OFF
+![face_off](https://gitlab.com/skash/images-and-gifs/-/raw/master/face-off/1_face_off.png)
+*Face-OFF*
