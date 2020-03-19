@@ -2,7 +2,7 @@
 
 ![](https://gitlab.com/skash/images-and-gifs/-/raw/master/face-off/faceoff.gif)
 
-An ANTs-based commandline utility to deface whole-head anatomical MRI images.
+**An ANTs-based commandline utility to deface whole-head anatomical MRI images.**
 
 ***
 
