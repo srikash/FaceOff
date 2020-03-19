@@ -1,4 +1,4 @@
-## An ANTs-based commandline utility to deface whole-head anatomical MRI images.**
+## An ANTs-based commandline utility to deface whole-head anatomical MRI images.
 
 ***
 
