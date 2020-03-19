@@ -17,7 +17,7 @@ if [[ ! -s ${ANTS} ]]; then
     exit
 fi
 
-SCRIPT_LOCATION=$(which antsDeface.sh)
+SCRIPT_LOCATION=$(which FaceOff)
 SCRIPT_DIR=$(dirname "${SCRIPT_LOCATION}")
 TEMPLATE_DIR="${SCRIPT_DIR}/tempData"
 
