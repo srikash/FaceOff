@@ -70,10 +70,10 @@ function reportParameters() {
     cat <<REPORTPARAMETERS
 
 --------------------------------------------------------------------------------
-    ${bold} 0. antsDeface initialised with $n_threads threads ${normal}
+    ${bold} 0. Initialised with $n_threads threads ${normal}
 --------------------------------------------------------------------------------
     ANTs installation found :   ${bold} $ANTSPATH ${normal} 
-    antsDeface location     :   ${bold} $SCRIPT_DIR ${normal}
+    FaceOff location        :   ${bold} $SCRIPT_DIR ${normal}
     Input data              :   ${bold} $input_file ${normal}
     Deface mask (output)    :   ${bold} $OUTPUT_MASK_NAME ${normal}
     Defaced data (output)   :   ${bold} $OUTPUT_NAME ${normal}
@@ -239,5 +239,5 @@ rm $TEMPLATE_DIR/REG_INPUT_TO_TEMP_*.*
 #
 ################################################################################
 
-echo "  ${bold} 4. antsDeface ended.    ${normal}"
+echo "  ${bold} 4. FaceOff ended.    ${normal}"
 echo "================================================================================"

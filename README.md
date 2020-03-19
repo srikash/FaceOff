@@ -17,7 +17,7 @@ Avants, Brian; Tustison, Nick (2018): ANTs/ANTsR Brain Templates. figshare. Data
 
 ## Example use
 
-`FaceOff -i sub-01-mp2rage-t1w.nii.gz -n 12`
+`FaceOff.sh -i sub-01-mp2rage-t1w.nii.gz -n 12`
 
 #### Face-ON
 ![face_on](https://gitlab.com/skash/images-and-gifs/-/raw/master/face-off/0_face_on.png)
