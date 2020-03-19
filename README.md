@@ -1,7 +1,3 @@
-# FaceOff
-
-![](https://gitlab.com/skash/images-and-gifs/-/raw/master/face-off/faceoff.gif)
-
 **An ANTs-based commandline utility to deface whole-head anatomical MRI images.**
 
 ***
@@ -21,8 +17,10 @@ How-To:
 
 `FaceOff -i sub-01-mp2rage-t1w.nii.gz -n 12`
 
-#### Face-ON
+#### Before
 ![face_on](https://gitlab.com/skash/images-and-gifs/-/raw/master/face-off/0_face_on.png)
 
-#### Face-OFF
+#### After
 ![face_off](https://gitlab.com/skash/images-and-gifs/-/raw/master/face-off/1_face_off.png)
+
+![](https://gitlab.com/skash/images-and-gifs/-/raw/master/face-off/faceoff.gif)
