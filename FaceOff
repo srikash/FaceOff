@@ -99,11 +99,6 @@ fi
 
 interpolation_type=GenericLabel
 n_threads=12
-if [ -z "$force_syn" ]; then
-    syn="no"
-else
-    syn="yes"
-fi
 
 ################################################################################
 #
@@ -159,6 +154,13 @@ else
     OUTPUT_MASK_NAME=${input_file%.*.*}_defaceMask.nii.gz
     OUTPUT_NAME=${input_file%.*.*}_defaced.nii.gz
 
+fi
+
+if [ -z "$force_syn" ]; then
+    force_syn=0
+    syn="no"
+else
+    syn="yes"
 fi
 
 ################################################################################
