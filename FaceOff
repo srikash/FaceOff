@@ -100,7 +100,7 @@ fi
 interpolation_type=GenericLabel
 n_threads=12
 
-if [$force_syn -eq 1]; then
+if [ $force_syn -eq 1 ]; then
     syn="TRUE"
 else
     force_syn=0
@@ -186,7 +186,7 @@ ${ANTSPATH}/antsAI \
     --metric MI[ $TEMPLATE_DIR/OASIS_T1w.nii.gz , $input_file , 32 , Regular , 0.25 ] \
     --output $TEMPLATE_DIR/REG_INPUT_TO_TEMP_INIT.mat
 
-if [$force_syn -eq 1]; then
+if [ $force_syn -eq 1 ]; then
     echo "  ${bold} Additional SyN stage will be used. ${normal}"
     echo " "
 
