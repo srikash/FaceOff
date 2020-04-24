@@ -99,8 +99,7 @@ fi
 
 interpolation_type=GenericLabel
 n_threads=12
-
-if [ -z $force_syn ]; then
+if [ -z "$force_syn" ]; then
     force_syn=0
     syn="FALSE"
 else
