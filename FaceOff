@@ -194,12 +194,13 @@ ${ANTSPATH}/antsRegistration \
     --metric Mattes[ $TEMPLATE_DIR/OASIS_T1w.nii.gz , $input_file , 1 , 32 , Regular , 0.25 ] \
     --convergence [ 1000x500x250,1e-6,10 ] \
     --shrink-factors 4x2x1 \
-    --smoothing-sigmas 3x2x1vox \
-    --transform SyN[ 0.1,3,0 ] \
-    --metric CC[ $TEMPLATE_DIR/OASIS_T1w.nii.gz , $input_file , 1 , 2 ] \
-    --convergence [ 50x25,1e-6,10 ] \
-    --shrink-factors 2x1 \
-    --smoothing-sigmas 1x0vox
+    --smoothing-sigmas 3x2x1vox 
+    #\
+    #--transform SyN[ 0.1,3,0 ] \
+    #--metric CC[ $TEMPLATE_DIR/OASIS_T1w.nii.gz , $input_file , 1 , 2 ] \
+    #--convergence [ 50x25,1e-6,10 ] \
+    #--shrink-factors 2x1 \
+    #--smoothing-sigmas 1x0vox
 
 echo "  ${bold} 1. Mapped to template.    ${normal}"
 echo "--------------------------------------------------------------------------------"
