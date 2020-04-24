@@ -77,7 +77,7 @@ function reportParameters() {
     ANTs installation found :   ${bold} $ANTSPATH ${normal} 
     FaceOff location        :   ${bold} $SCRIPT_DIR ${normal}
     Input data              :   ${bold} $input_file ${normal}
-    Use SyN                 :   ${bold} $syn ${normal}
+    Using SyN?              :   ${bold} $syn ${normal}
     Deface mask (output)    :   ${bold} $OUTPUT_MASK_NAME ${normal}
     Defaced data (output)   :   ${bold} $OUTPUT_NAME ${normal}
 --------------------------------------------------------------------------------
@@ -101,9 +101,9 @@ interpolation_type=GenericLabel
 n_threads=12
 if [ -z "$force_syn" ]; then
     force_syn=0
-    syn="FALSE"
+    syn="no"
 else
-    syn="TRUE"
+    syn="yes"
 fi
 
 ################################################################################
