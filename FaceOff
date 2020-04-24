@@ -100,11 +100,11 @@ fi
 interpolation_type=GenericLabel
 n_threads=12
 
-if [ $force_syn -eq 1 ]; then
-    syn="TRUE"
-else
+if [ -z $force_syn ]; then
     force_syn=0
     syn="FALSE"
+else
+    syn="TRUE"
 fi
 
 ################################################################################
