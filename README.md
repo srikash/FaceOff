@@ -1,7 +1,7 @@
-## An ANTs-based commandline utility to deface whole-head anatomical MRI images.
+# Face-Off 
 
+ANTs-based commandline utility to deface anatomical MRI images.
 ***
-
 A sub-set of the OASIS ANTs template files are used. The complete ANTs OASIS Template and Priors can be found here:\
 [1] Source: [https://ndownloader.figshare.com/files/3133832](https://ndownloader.figshare.com/files/3133832)\
 [2] Mirror: [https://gitlab.com/skash/antstemplatesmirror/-/blob/master/ANTs_OASIS_Template_and_Priors.zip](https://gitlab.com/skash/antstemplatesmirror/-/blob/master/ANTs_OASIS_Template_and_Priors.zip)
@@ -11,9 +11,9 @@ Avants, Brian; Tustison, Nick (2018): ANTs/ANTsR Brain Templates. figshare. Data
 
 ***
 
-How-To: 
+## How-To: 
 
-## Example use
+### Example use
 
 `FaceOff -i sub-01-mp2rage-t1w.nii.gz -n 12`
 
