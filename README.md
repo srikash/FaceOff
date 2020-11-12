@@ -12,6 +12,9 @@ Avants, Brian; Tustison, Nick (2018): ANTs/ANTsR Brain Templates. figshare. Data
 
 ## How-To: 
 
+### Make sure everything is findable
+`echo "export PATH=$PATH:/path/to/faceoff" >> ~/.bashrc`
+
 ### Example use
 
 `FaceOff -i sub-01-mp2rage-t1w.nii.gz -n 12`
