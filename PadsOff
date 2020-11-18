@@ -78,8 +78,8 @@ function reportParameters() {
     FaceOff location        :   ${bold} $SCRIPT_DIR ${normal}
     Input data              :   ${bold} $input_file ${normal}
     Using SyN?              :   ${bold} $syn ${normal}
-    Deface mask (output)    :   ${bold} $OUTPUT_MASK_NAME ${normal}
-    Defaced data (output)   :   ${bold} $OUTPUT_NAME ${normal}
+    DePad mask (output)     :   ${bold} $OUTPUT_MASK_NAME ${normal}
+    Depadded data (output)  :   ${bold} $OUTPUT_NAME ${normal}
 --------------------------------------------------------------------------------
 
 REPORTPARAMETERS
@@ -291,6 +291,13 @@ else
     echo "--------------------------------------------------------------------------------"
 
 fi
+
+# Invert DePadMask
+${ANTSPATH}/ImageMath \
+    3 \
+    $OUTPUT_MASK_NAME \
+    Neg \
+    $OUTPUT_MASK_NAME
 
 ${ANTSPATH}/ImageMath \
     3 \
