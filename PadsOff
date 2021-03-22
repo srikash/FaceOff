@@ -75,7 +75,7 @@ function reportParameters() {
     ${bold} 0. Initialised with $n_threads threads ${normal}
 --------------------------------------------------------------------------------
     ANTs installation found :   ${bold} $ANTSPATH ${normal} 
-    FaceOff location        :   ${bold} $SCRIPT_DIR ${normal}
+    PadsOff location        :   ${bold} $SCRIPT_DIR ${normal}
     Input data              :   ${bold} $input_file ${normal}
     Using SyN?              :   ${bold} $syn ${normal}
     DePad mask (output)     :   ${bold} $OUTPUT_MASK_NAME ${normal}
@@ -157,11 +157,10 @@ else
 fi
 
 if [ -z "$force_syn" ]; then
-    force_syn=1
-    syn="yes"
-else
     force_syn=0
     syn="no"
+else
+    syn="yes"
 fi
 
 ################################################################################
@@ -187,7 +186,7 @@ ${ANTSPATH}/antsAI \
     --metric MI[ $TEMPLATE_DIR/OASIS_T1w.nii.gz , $input_file , 32 , Regular , 0.25 ] \
     --output $TEMPLATE_DIR/REG_INPUT_TO_TEMP_INIT.mat
 
-echo "  ${bold} 1. Mapped to template.    ${normal}"
+echo "  ${bold} 0. Initialised to template.    ${normal}"
 echo "--------------------------------------------------------------------------------"
 
 if [ $force_syn -eq 1 ]; then
@@ -241,7 +240,7 @@ if [ $force_syn -eq 1 ]; then
         --transform [ $TEMPLATE_DIR/REG_INPUT_TO_TEMP_0GenericAffine.mat , 1 ] \
         --verbose 0
 
-    echo "  ${bold} 2. Deface mask created.    ${normal}"
+    echo "  ${bold} 2. DePad mask created.    ${normal}"
     echo "--------------------------------------------------------------------------------"
 
 else
@@ -287,7 +286,7 @@ else
         --transform [ $TEMPLATE_DIR/REG_INPUT_TO_TEMP_0GenericAffine.mat , 1 ] \
         --verbose 0
 
-    echo "  ${bold} 2. Deface mask created.    ${normal}"
+    echo "  ${bold} 2. DePad mask created.    ${normal}"
     echo "--------------------------------------------------------------------------------"
 
 fi
@@ -306,7 +305,7 @@ ${ANTSPATH}/ImageMath \
     $input_file \
     $OUTPUT_MASK_NAME
 
-echo "  ${bold} 3. Defacing completed.    ${normal}"
+echo "  ${bold} 3. DePadding completed.    ${normal}"
 echo "--------------------------------------------------------------------------------"
 
 end_time0=$(date +%s)
@@ -326,5 +325,5 @@ rm $TEMPLATE_DIR/REG_INPUT_TO_TEMP_*.*
 #
 ################################################################################
 
-echo "  ${bold} 4. FaceOff ended. It took $(($nettime0 / 3600))h:$(($nettime0 % 3600 / 60))m:$(($nettime0 % 60))s.    ${normal}"
+echo "  ${bold} 4. PadsOff ended. It took $(($nettime0 / 3600))h:$(($nettime0 % 3600 / 60))m:$(($nettime0 % 60))s.    ${normal}"
 echo "================================================================================"
