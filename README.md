@@ -1,4 +1,4 @@
-# Face-Off [![DOI](https://zenodo.org/badge/307797054.svg)](https://zenodo.org/badge/latestdoi/307797054)
+# FaceOff [![DOI](https://zenodo.org/badge/307797054.svg)](https://zenodo.org/badge/latestdoi/307797054)
 
 ANTs-based commandline utility to deface anatomical MRI images.
 ***
