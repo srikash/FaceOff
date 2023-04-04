@@ -1,44 +1,25 @@
+# Start from Ubuntu 18.04
 FROM ubuntu:18.04
 
-# Install required dependencies
+# Install required packages
 RUN apt-get update && \
-    apt-get install -y \
-        wget \
-        unzip \
-        build-essential \
-        cmake \
-        zlib1g-dev \
-        libxt-dev \
-        libxml2-dev \
-        libxslt1-dev \
-        libgdcm2-dev \
-        libpng-dev \
-        libjpeg-dev \
-        libboost-dev \
-        libeigen3-dev \
-        git \
-        vim
+    apt-get install -y wget unzip
 
-# Download and install ANTs 2.3.4
-WORKDIR /opt
-RUN wget https://github.com/ANTsX/ANTs/archive/v2.3.4.tar.gz && \
-    tar -zxvf v2.3.4.tar.gz && \
-    rm v2.3.4.tar.gz && \
-    cd ANTs-2.3.4 && \
-    mkdir build && \
-    cd build && \
-    cmake .. && \
-    make -j 4 && \
-    make install && \
-    cd ../..
+# Download ANTs 2.4.3 and install it
+RUN wget https://github.com/ANTsX/ANTs/releases/download/v2.4.3/ants-2.4.3-ubuntu-18.04-X64-gcc.zip && \
+    unzip ants-2.4.3-ubuntu-18.04-X64-gcc.zip && \
+    rm ants-2.4.3-ubuntu-18.04-X64-gcc.zip && \
+    mv ants-2.4.3-ubuntu-18.04-X64-gcc /opt/ants && \
+    export ANTSPATH=/opt/ants/bin/
 
-# Set ANTSPATH environment variable
-ENV ANTSPATH /opt/ANTs-2.3.4/bin/
-
-# Clone FaceOff repository
-WORKDIR /opt
-RUN git clone https://github.com/srikash/FaceOff.git
-
-# Set entry point
+# Clone FaceOff repository and set it as the working directory
+RUN apt-get update && \
+    apt-get install -y git && \
+    git clone https://github.com/srikash/FaceOff.git /opt/FaceOff
 WORKDIR /opt/FaceOff
+
+# Set ANTs path in environment variables
+ENV ANTSPATH=/opt/ants/bin/
+
+# Set entry point as FaceOff script
 ENTRYPOINT ["/opt/FaceOff/FaceOff"]
