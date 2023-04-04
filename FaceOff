@@ -30,13 +30,14 @@ normal=$(tput sgr0)
 ################################################################################
 # Define help message
 function usage {
-    echo "Usage: $(basename $0) [-h] -i <input_file> [-n <n_threads>] [-s <force_syn>]"
+    echo "Usage: $(basename $0) [-h] -i <input_file> [-n <n_threads>] [-s <force_syn>] [-d]"
     echo " "
     echo "Options:"
     echo "  -h                           Show this help message and exit."
     echo "  -i <input_file>              Specify the input file for processing. (required)"
     echo "  -n <n_threads>               Specify the number of threads for processing. Default: 1."
     echo "  -s <force_syn>               Specify whether to force the SyN step of ANTS registration. Default: 0."
+    echo "  -d <depad>                   Specify whether dielectric pads need to be stripped off. Default: 0."
     echo ""
     echo ""
     echo -e "Script was created by: Sriranga Kashyap (03-2020)\n"
@@ -54,8 +55,11 @@ function reportParameters() {
     echo "--------------------------------------------------------------------------------"
     echo "  ANTs installation found :   ${bold} $ANTSPATH ${normal}"
     echo "  FaceOff location        :   ${bold} $SCRIPT_DIR ${normal}"
+    echo " "
+    echo "  Using SyN?              :   ${bold} $issyn ${normal}"
+    echo "  Depadding?              :   ${bold} $isdepad ${normal}"
+    echo " "
     echo "  Input data              :   ${bold} $input_file ${normal}"
-    echo "  Using SyN?              :   ${bold} $syn ${normal}"
     echo "  Deface mask (output)    :   ${bold} $OUTPUT_MASK_NAME ${normal}"
     echo "  Defaced data (output)   :   ${bold} $OUTPUT_NAME ${normal}"
     echo "--------------------------------------------------------------------------------"
@@ -67,7 +71,7 @@ function reportParameters() {
 #
 ################################################################################
 # Parse command-line arguments
-while getopts "h:i:n:s:" opt; do
+while getopts "h:i:n:s:d:" opt; do
     case $opt in
     h)
         usage
@@ -81,6 +85,9 @@ while getopts "h:i:n:s:" opt; do
         ;;
     s)
         force_syn=$OPTARG
+        ;;
+    d)
+        depad=$OPTARG
         ;;
     \?)
         echo "Invalid option: -$OPTARG" >&2
@@ -140,9 +147,16 @@ OUTPUT_NAME=${OUTPUT_PREFIX}_defaced.nii.gz
 
 if [ -z "$force_syn" ]; then
     force_syn=0
-    syn="no"
+    issyn="no"
 else
-    syn="yes"
+    issyn="yes"
+fi
+
+if [ -z "$depad" ]; then
+    depad=0
+    isdepad="no"
+else
+    isdepad="yes"
 fi
 
 ################################################################################
@@ -237,6 +251,53 @@ ${ANTSPATH}/ImageMath \
 echo "  ${bold} 3. Defacing completed.    ${normal}"
 echo "--------------------------------------------------------------------------------"
 
+if [[ $depad -eq 1 ]]; then
+    OUTPUT_MASK_NAME=${OUTPUT_PREFIX}_depadMask.nii.gz
+    OUTPUT_NAME=${OUTPUT_PREFIX}_depadded.nii.gz
+
+    ${ANTSPATH}/antsApplyTransforms \
+        --dimensionality 3 \
+        --interpolation GenericLabel \
+        --reference-image $input_file \
+        --input $TEMPLATE_DIR/OASIS_dePadMask.nii.gz \
+        --output $OUTPUT_MASK_NAME \
+        --transform [ $TEMPLATE_DIR/REG_INPUT_TO_TEMP_0GenericAffine.mat , 1 ] \
+        --verbose 0
+
+    echo "  ${bold} 4. DePad mask created.    ${normal}"
+    echo "--------------------------------------------------------------------------------"
+    # Invert DePadMask
+    ${ANTSPATH}/ImageMath \
+        3 \
+        $OUTPUT_MASK_NAME \
+        Neg \
+        $OUTPUT_MASK_NAME
+
+    ${ANTSPATH}/ImageMath \
+        3 \
+        ${OUTPUT_PREFIX}_depadded.nii.gz \
+        m \
+        $input_file \
+        $OUTPUT_MASK_NAME
+
+    ${ANTSPATH}/ImageMath \
+        3 \
+        ${OUTPUT_PREFIX}_combinedMask.nii.gz \
+        m \
+        ${OUTPUT_PREFIX}_depadMask.nii.gz \
+        ${OUTPUT_PREFIX}_defaceMask.nii.gz
+
+    ${ANTSPATH}/ImageMath \
+        3 \
+        ${OUTPUT_PREFIX}_defaced_depadded.nii.gz \
+        m \
+        $input_file \
+        ${OUTPUT_PREFIX}_combinedMask.nii.gz
+
+    echo "  ${bold} 5. DePadding completed.    ${normal}"
+    echo "--------------------------------------------------------------------------------"
+fi
+
 end_time0=$(date +%s)
 nettime0=$(expr $end_time0 - $start_time0)
 
@@ -247,8 +308,7 @@ nettime0=$(expr $end_time0 - $start_time0)
 ################################################################################
 
 rm $TEMPLATE_DIR/REG_INPUT_TO_TEMP_*.*
-echo "  ${bold} 4. Clean-up completed.    ${normal}"
-echo "--------------------------------------------------------------------------------"
+
 ################################################################################
 #
 # DISPLAY DONE
