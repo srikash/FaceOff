@@ -1,6 +1,6 @@
 # FaceOff [![DOI](https://zenodo.org/badge/307797054.svg)](https://zenodo.org/badge/latestdoi/307797054)
 
-ANTs-based commandline utility to deface anatomical MRI images.
+ANTs-based commandline utility to deface anatomical MRI images and optionally, depad the images off dielectric pads (7 T specific).
 ***
 A sub-set of the OASIS ANTs template files are used. The complete ANTs OASIS Template and Priors can be found here:\
 Source: [https://ndownloader.figshare.com/files/3133832](https://ndownloader.figshare.com/files/3133832)\
