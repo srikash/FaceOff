@@ -19,14 +19,17 @@ def log(message: str) -> None:
 
 
 def warning(message: str) -> None:
+    """Print a timestamped warning."""
     console.print(f"[dim]{_now()}[/] [yellow]Warning:[/] {message}", soft_wrap=True)
 
 
 def success(message: str) -> None:
+    """Print a green tick and `message`."""
     console.print(f"[bold green]✓[/bold green] {message}", soft_wrap=True)
 
 
 def error(message: str) -> None:
+    """Print a red cross and `message`."""
     console.print(f"[bold red]✗[/bold red] {message}", soft_wrap=True)
 
 
@@ -37,6 +40,7 @@ def quote(text: str, source: str) -> None:
 
 
 def format_elapsed(seconds: float) -> str:
+    """A short duration: "6.4s" under a minute, otherwise "3m 15s"."""
     if seconds < 60:
         return f"{seconds:.1f}s"
     minutes, remaining = divmod(int(seconds), 60)

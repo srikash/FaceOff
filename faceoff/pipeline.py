@@ -19,11 +19,15 @@ from .workspace import workspace
 
 @dataclass(frozen=True)
 class Options:
+    """What one run does. The defaults match the command line's."""
+
     threads: int
     # Not required: the affine alone already gives the deface mask. Kept for completeness.
     syn: bool = False
+    # Also write images in template orientation (header only) and crop them to TEMPLATE_CROP_Z.
     reorient: bool = True
     crop: bool = True
+    # Also write a copy with the template's face inserted.
     reface: bool = False
     # Images in the same scanner space as the input (other MP2RAGE images, GRE echoes, ...):
     # they get the same deface mask and reorientation. Not refaced.
@@ -32,6 +36,12 @@ class Options:
 
 @dataclass(frozen=True)
 class Outputs:
+    """The files one run writes; fields left as None or () are not written for these options.
+
+    Outputs for the input sit next to the input; extra-image outputs sit next to each extra
+    image. `tal_` files are in template orientation.
+    """
+
     deface_mask: Path
     defaced: Path
     txn_itk: Path
@@ -44,7 +54,7 @@ class Outputs:
     extra_tal_defaced: tuple[Path, ...] = ()
 
     def written(self) -> list[Path]:
-        """Every output file, in the order they are written."""
+        """Every output file this run writes."""
         paths: list[Path] = []
         for value in vars(self).values():
             if isinstance(value, Path):
@@ -55,7 +65,11 @@ class Outputs:
 
 
 class Reporter(Protocol):
-    """Progress sink. `ConsoleReporter` prints; `SilentReporter` does nothing."""
+    """Progress sink, called by `run` in this order: `begin`, `registering`, then `step` after
+    each finished step (`cropped` when a crop is applied), and `end`.
+
+    `ConsoleReporter` (faceoff.reporting) prints; `SilentReporter` does nothing.
+    """
 
     def begin(self, input_file: Path, options: Options, outputs: Outputs) -> None: ...
     def registering(self, syn: bool, reface: bool) -> None: ...
@@ -65,6 +79,8 @@ class Reporter(Protocol):
 
 
 class SilentReporter:
+    """A Reporter that reports nothing; the default for library use."""
+
     def begin(self, input_file: Path, options: Options, outputs: Outputs) -> None: ...
     def registering(self, syn: bool, reface: bool) -> None: ...
     def step(self, message: str) -> None: ...
@@ -73,6 +89,7 @@ class SilentReporter:
 
 
 def strip_extension(path: Path) -> Path:
+    """`scan.nii.gz` -> `scan`. Raises ValueError for anything but .nii or .nii.gz."""
     name = path.name
     if name.endswith(".nii.gz"):
         return path.parent / name[:-7]

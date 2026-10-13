@@ -250,4 +250,5 @@ def cli(
 
 
 def main() -> None:
+    """Run the command line (`python -m faceoff`)."""
     cli()

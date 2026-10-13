@@ -22,6 +22,7 @@ def package_version() -> str:
 
 
 def print_banner() -> None:
+    """The opening banner: name and version between two rules."""
     title = f"faceoff v{package_version()}"
     width = max(len(title) + 4, 45)
     border = "%" + "-" * (width - 2) + "%"

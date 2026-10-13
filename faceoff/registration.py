@@ -16,6 +16,11 @@ from .workspace import Workspace
 
 
 class Stage(Enum):
+    """Which transforms bring template images into subject space.
+
+    DEFACE: the affine (or the --syn warp). REFACE: additionally the face-masked SyN warp.
+    """
+
     DEFACE = "deface"
     REFACE = "reface"
 

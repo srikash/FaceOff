@@ -52,7 +52,10 @@ faceoff --help
 git clone https://github.com/srikash/FaceOff.git
 cd FaceOff
 pip install .
+faceoff --help
 ```
+
+You can also run it from the checkout without installing: `python -m faceoff --help`.
 
 ### The ANTs image
 
@@ -130,7 +133,7 @@ The refaced image is not the person's own face. It is the template's, scaled to 
 
 ## Run time
 
-On a 12-core workstation, a 1 mm isotropic scan takes about 15 seconds with the defaults. `--reface` takes about 3 minutes. Adding `--syn` takes about 7 minutes more. Pass `-n` to use fewer cores.
+On a 12-core workstation, a 1 mm isotropic scan takes about 10 seconds with the defaults, plus a few seconds for each extra image. `--reface` takes about 3 minutes. Adding `--syn` takes about 7 minutes more. Pass `-n` to use fewer cores.
 
 ## Templates and the MNI licence
 
@@ -139,7 +142,7 @@ FaceOff registers your scan to a modified version of the MNI ICBM152 2020 extend
 ## Development
 
 ```bash
-pip install pytest ruff
+pip install -e . pytest ruff
 python -m pytest tests
 ruff check --select F,E9 .
 ```
@@ -148,6 +151,7 @@ ruff check --select F,E9 .
 faceoff/                command line, ANTs runner, registration, reorientation, face editing, template download
 tests/                  unit tests
 registration_review/    the exact ANTs commands each mode runs
+hatch_build.py          puts the template files into the wheel when it is built
 ```
 
 ## Licence

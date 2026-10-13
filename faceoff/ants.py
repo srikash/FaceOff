@@ -23,16 +23,25 @@ class AntsError(RuntimeError):
 
 
 class AntsRunner(Protocol):
+    """Runs one ANTs tool. Raises AntsError if it fails."""
+
     def run(self, tool: str, args: Sequence[str | Path]) -> None: ...
 
 
 class DockerAnts:
+    """Runs ANTs tools in the pinned Docker image, one container per call.
+
+    `scratch` is the only folder the container can write to; every other folder named in the
+    arguments is mounted read-only. Outputs are owned by the calling user.
+    """
+
     def __init__(self, threads: int, scratch: Path, image: str = ANTS_IMAGE) -> None:
         self.threads = threads
         self.scratch = scratch
         self.image = image
 
     def command(self, tool: str, args: Sequence[str | Path]) -> list[str]:
+        """The full `docker run` command line for one tool call."""
         cmd = [
             "docker", "run", "--rm",
             "--init",  # lets Ctrl-C reach ANTs

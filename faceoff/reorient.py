@@ -53,6 +53,7 @@ class TalReorientation:
     def from_ants_affine(
         cls, ants: AntsRunner, ws: Workspace, affine_mat: Path
     ) -> TalReorientation:
+        """From the registration's ITK affine file (read with ConvertTransformFile)."""
         matrix_file = ws.path("affine_matrix.txt")
         ants.run("ConvertTransformFile", ["3", affine_mat, matrix_file, "--hm"])
         return cls.from_affine_matrix(np.loadtxt(matrix_file))

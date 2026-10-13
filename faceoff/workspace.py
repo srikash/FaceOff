@@ -13,6 +13,8 @@ WORKSPACE_ROOT = Path("/tmp")
 
 
 class Workspace:
+    """A scratch folder for one run; `path(name)` gives a file inside it."""
+
     def __init__(self, root: Path) -> None:
         self.root = root
 

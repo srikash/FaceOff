@@ -21,6 +21,7 @@ TEMPLATE_FILES = {
 
 
 def md5(path: Path) -> str:
+    """Hex md5 of a file, read in 1 MB chunks."""
     digest = hashlib.md5()
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1 << 20), b""):
