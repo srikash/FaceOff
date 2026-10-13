@@ -1,0 +1,5 @@
+__pycache__/
+faceoff/data/
+dist/
+tempData/
+testdata/
