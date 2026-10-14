@@ -1,6 +1,6 @@
 # FaceOff [![Version](https://img.shields.io/badge/version-2.0.0-purple.svg)](https://github.com/srikash/FaceOff/releases/tag/v2.0.0) [![Licence](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE) [![DOI](https://zenodo.org/badge/307797054.svg)](https://zenodo.org/badge/latestdoi/307797054)
 
-Deface anatomical MRI scans with ANTs, run in Docker so you don't have to install it. It removes the face and, if you ask, inserts a template face in its place.
+Deface anatomical MRI scans with ANTs (Dockerised). It removes the face and, if you ask, inserts a template face in its place.
 
 Other features include rotation to template orientation and automatic cropping, all done with no interpolation.
 
