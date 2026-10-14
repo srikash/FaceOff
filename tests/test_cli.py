@@ -9,7 +9,7 @@ from faceoff.ants import AntsError
 
 @pytest.fixture
 def runs(monkeypatch):
-    """Replace Docker, the template download, and the defacing; record each run."""
+    """Replace the container check, the template download, and the defacing; record each run."""
     calls = []
 
     def fake_run(path, options, reporter):
@@ -17,7 +17,7 @@ def runs(monkeypatch):
         if Path(path).name.startswith("bad"):
             raise AntsError("antsRegistration failed (exit code 1).")
 
-    monkeypatch.setattr(cli_module, "ensure_docker_image", lambda: None)
+    monkeypatch.setattr(cli_module.Container, "prepare", lambda self, log: None)
     monkeypatch.setattr(cli_module, "ensure_template", lambda log: None)
     monkeypatch.setattr(cli_module.deface, "run", fake_run)
     return calls
@@ -117,4 +117,28 @@ def test_missing_extra_image_stops_before_anything_runs(tmp_path, runs):
     assert result.exit_code == 2
     assert "Extra image not found" in result.output
     assert "faceoff v" not in result.output  # no banner: it stopped before starting
+    assert runs == []
+
+
+def test_sif_means_apptainer(tmp_path, runs):
+    sif = _scan(tmp_path, "ants.sif")
+    result = CliRunner().invoke(cli_module.cli, ["-i", _scan(tmp_path, "a.nii.gz"), "--sif", sif])
+    assert result.exit_code == 0, result.output
+    [(_, options)] = runs
+    assert options.container.engine == "apptainer"
+    assert options.container.image == sif
+
+
+def test_docker_is_the_default_engine(tmp_path, runs):
+    result = CliRunner().invoke(cli_module.cli, ["-i", _scan(tmp_path, "a.nii.gz")])
+    assert result.exit_code == 0, result.output
+    [(_, options)] = runs
+    assert options.container.engine == "docker"
+
+
+def test_sif_is_refused_with_docker(tmp_path, runs):
+    result = CliRunner().invoke(cli_module.cli, [
+        "-i", _scan(tmp_path, "a.nii.gz"), "--engine", "docker", "--sif", _scan(tmp_path, "x.sif"),
+    ])
+    assert result.exit_code == 2
     assert runs == []

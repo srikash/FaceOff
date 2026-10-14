@@ -18,7 +18,7 @@ from rich.text import Text
 from rich_click.rich_command import RichCommand
 
 from . import deface
-from .ants import AntsError, ensure_docker_image
+from .ants import ENGINES, AntsError, Container
 from .messages import (
     ConsoleReporter,
     console,
@@ -51,6 +51,7 @@ rich_click_config.OPTION_GROUPS = {
             "panel_styles": {"border_style": _BATCH},
         },
         {"name": "Outputs", "options": ["--reorient", "--crop", "--reface"], "title_style": "bold"},
+        {"name": "How ANTs runs", "options": ["--engine", "--sif"], "title_style": "bold"},
         {
             "name": "Optional flags",
             "options": ["--threads", "--syn", "--version", "--help"],
@@ -115,6 +116,16 @@ class FaceOffCommand(RichCommand):
                 "[bold cyan]--extra-images[/] "
                 "[green]\"${uni%_UNIT1.nii.gz}\"_inv-*_MP2RAGE.nii.gz[/]\n"
                 "[bold white]done[/]",
+            ),
+            panel(
+                "On a cluster (Apptainer or Singularity)",
+                f"{_EXAMPLE} [bold cyan]--engine apptainer[/]\n"
+                "Downloads the ANTs image into your cache folder the first time, then reuses "
+                "it.\n\n"
+                "[bold white]apptainer pull[/] [green]ants.sif[/] "
+                "[green]docker://antsx/ants:2.6.5[/]\n"
+                f"{_EXAMPLE} [bold cyan]--sif[/] [green]ants.sif[/]\n"
+                "Uses an image file you pulled yourself, for example on a login node.",
             ),
             Text.from_markup(f"\n[dim]{CITATION_NOTICE}[/]"),
         )
@@ -196,8 +207,8 @@ def _deface_with_timer(path: Path, options: deface.Options) -> None:
     name="faceoff",
     cls=FaceOffCommand,
     help=(
-        "Deface anatomical MRI scans using ANTs in Docker, with optional reorientation to "
-        "MNI152 template space and optional refacing."
+        "Deface anatomical MRI scans using ANTs in Docker or Apptainer, with optional "
+        "reorientation to MNI152 template space and optional refacing."
     ),
     epilog=CITATION_NOTICE,
     no_args_is_help=True,
@@ -244,6 +255,16 @@ def _deface_with_timer(path: Path, options: deface.Options) -> None:
     help="Not required; included for completeness. Adds a slower registration and uses it "
     "for the deface mask. The default registration already gives almost the same mask.",
 )
+@click.option(
+    "--engine", type=click.Choice(ENGINES), default=None,
+    help="Run ANTs in Docker or Apptainer. Apptainer falls back to the singularity command "
+    "if that is what your system has. Default: apptainer with --sif, otherwise docker.",
+)
+@click.option(
+    "--sif", type=click.Path(path_type=Path, exists=True, dir_okay=False), metavar="FILE",
+    help="An Apptainer image file of ANTs to use, for example from apptainer pull. Implies "
+    "--engine apptainer.",
+)
 @click.option("-d", "depad", is_flag=True, hidden=True, help="Deprecated; ignored.")
 @click.version_option(package_version(), "--version", prog_name="faceoff")
 @click.pass_context
@@ -257,6 +278,8 @@ def cli(
     reface: bool,
     threads: int | None,
     syn: bool,
+    engine: str | None,
+    sif: Path | None,
     depad: bool,
 ) -> None:
     """Deface one scan, or several with --batch."""
@@ -273,7 +296,10 @@ def cli(
         )
     extras = _split_names([*extra_images, *context.args]) if extra_images else ()
     files = _split_names([batch, *context.args]) if batch else (input_file,)
-    if extras:  # catch a mistyped extra image before Docker or the template are fetched
+    if sif and engine == "docker":
+        raise click.UsageError("--sif is an Apptainer image; use it without --engine docker.")
+    container = Container(engine or ("apptainer" if sif else "docker"), sif)
+    if extras:  # catch a mistyped extra image before ANTs or the template are fetched
         try:
             deface.check_inputs(input_file, deface.Options(threads=1, extra_images=extras))
         except (FileNotFoundError, ValueError) as problem:
@@ -283,7 +309,7 @@ def cli(
     if depad:
         log("[yellow]-d (depadding) is deprecated and ignored.[/]")
     try:
-        ensure_docker_image()
+        container.prepare(log=log)
         ensure_template(log=log)
     except RuntimeError as failure:
         error(str(failure))
@@ -291,7 +317,7 @@ def cli(
 
     options = deface.Options(
         threads=_resolve_threads(threads), syn=syn, reorient=reorient, crop=crop, reface=reface,
-        extra_images=extras,
+        extra_images=extras, container=container,
     )
     if len(files) > 1:
         quote("This is turning into a real marriage.", "Face/Off (1997)")

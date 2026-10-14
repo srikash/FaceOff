@@ -15,7 +15,7 @@ faceoff/registration.py the ANTs registration, and moving template images onto t
 faceoff/masking.py      removing the face and inserting the template face
 faceoff/reorient.py     template orientation (header only) and the ITK/FSL transforms
 faceoff/messages.py     what is printed in the terminal
-faceoff/ants.py         running ANTs in Docker
+faceoff/ants.py         running ANTs in Docker or Apptainer
 faceoff/scratch.py      the temporary folder for each run
 faceoff/template.py     the template: its files, brain centre and crop range; template_files.py downloads it
 bundle_template.py      puts the template files into the pip package when it is built

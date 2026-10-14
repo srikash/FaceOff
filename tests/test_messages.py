@@ -21,7 +21,7 @@ def test_console_reporter_prints_settings_steps_and_files(monkeypatch, tmp_path)
     reporter.end()
 
     text = console.export_text()
-    assert "ANTs: antsx/ants:2.6.5 (3 threads)" in text
+    assert "ANTs: antsx/ants:2.6.5 in Docker (3 threads)" in text
     assert "Reface: yes" in text and "SyN: no" in text
     assert "next hundred years" in text  # the --reface quote
     assert "Completed: deface mask in" in text

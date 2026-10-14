@@ -14,6 +14,8 @@ Input files must be `.nii` or `.nii.gz`. Outputs are written next to the input f
 | `--crop` / `--no-crop` | Trim the reoriented images to template slices 70 to 263 along z (the default). Whole slices are dropped, and nothing is resampled. |
 | `--reface` | Also write a refaced image, with the template's face filling the removed region. |
 | `--syn` | Not required, and included for completeness. Adds a slower registration and uses its result for the deface mask. The default registration already gives almost the same mask. |
+| `--engine docker` / `--engine apptainer` | Run ANTs in Docker (the default) or in Apptainer. Apptainer falls back to the `singularity` command. See [installation](installation.md#on-a-cluster-apptainer-or-singularity). |
+| `--sif FILE` | An Apptainer image file of ANTs to use, for example one you made with `apptainer pull`. Implies `--engine apptainer`. |
 | `--version` | Print the version and exit. |
 | `-h`, `--help` | Show the options and a short usage guide. |
 

@@ -1,9 +1,10 @@
-"""Run ANTs tools from the antsx/ants Docker image, so ANTs need not be installed.
+"""Run ANTs tools from the antsx/ants container image, so ANTs need not be installed.
 
-`DockerAnts` runs the real tools; `RecordingAnts` only writes the commands down, for the
-tests. Each folder named in a command is made visible inside the container at the same path,
-so commands look exactly as they would with a local ANTs. The container can only write to
-the run's temporary folder.
+The image runs in Docker (`DockerAnts`) or, on clusters without Docker, in Apptainer or
+Singularity (`ApptainerAnts`); `Container` says which. `RecordingAnts` only writes the
+commands down, for the tests. Each folder named in a command is made visible inside the
+container at the same path, so commands look exactly as they would with a local ANTs. The
+container can only write to the run's temporary folder.
 """
 
 from __future__ import annotations
@@ -12,11 +13,13 @@ import os
 import re
 import shutil
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
 ANTS_IMAGE = "antsx/ants:2.6.5"
+ENGINES = ("docker", "apptainer")
 
 
 class AntsError(RuntimeError):
@@ -65,6 +68,39 @@ class DockerAnts:
             raise AntsError(f"{tool} failed (exit code {returncode}).")
 
 
+class ApptainerAnts:
+    """Run ANTs tools from an Apptainer (or Singularity) image file, one `exec` per tool.
+
+    The container sees only the folders named in the command, and none of your environment
+    apart from the thread count; it runs as you, so the files it writes are yours.
+    """
+
+    def __init__(self, threads: int, scratch: Path, image: Path, executable: str) -> None:
+        self.threads = threads
+        self.scratch = scratch
+        self.image = image
+        self.executable = executable
+
+    def command(self, tool: str, args: Sequence[str | Path]) -> list[str]:
+        """Return the full `apptainer exec` command for one ANTs tool."""
+        cmd = [
+            self.executable, "exec",
+            "--containall",  # no home folder, /tmp, or environment from the host
+            "--env", f"ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS={self.threads}",
+        ]
+        for folder, writable in _mounts(args, self.scratch):
+            # --mount, not --bind: scratch paths contain colons
+            spec = f"type=bind,source={folder},destination={folder}"
+            cmd += ["--mount", spec if writable else f"{spec},ro"]
+        return [*cmd, str(self.image), tool, *(str(a) for a in args)]
+
+    def run(self, tool: str, args: Sequence[str | Path]) -> None:
+        """Run `tool` with `args` in Apptainer. Raises AntsError if it fails."""
+        returncode = subprocess.run(self.command(tool, args)).returncode
+        if returncode != 0:
+            raise AntsError(f"{tool} failed (exit code {returncode}).")
+
+
 def _mounts(args: Sequence[str | Path], scratch: Path) -> list[tuple[Path, bool]]:
     """Return the folders the container needs: the temporary folder (writable), and the
     folder of every file named in the command, including inside ANTs brackets such as
@@ -94,13 +130,98 @@ class RecordingAnts:
         self.calls.append((tool, [str(a) for a in args]))
 
 
-def ensure_docker_image(image: str = ANTS_IMAGE) -> None:
+@dataclass(frozen=True)
+class Container:
+    """How ANTs is run: in Docker (the default), or in Apptainer or Singularity.
+
+    `sif` is an Apptainer image file you already have. Without one, FaceOff downloads the
+    ANTs image into a file in your cache folder the first time, and reuses it after that.
+    """
+
+    engine: str = "docker"
+    sif: Path | None = None
+
+    def __post_init__(self) -> None:
+        """Refuse an unknown engine, or an image file with Docker."""
+        if self.engine not in ENGINES:
+            raise ValueError(f"Unknown engine {self.engine!r}; use docker or apptainer.")
+        if self.sif is not None and self.engine != "apptainer":
+            raise ValueError("An image file (--sif) needs --engine apptainer.")
+
+    @property
+    def image(self) -> str:
+        """The image ANTs runs from: the Docker image name, or the Apptainer image file."""
+        if self.engine == "docker":
+            return ANTS_IMAGE
+        return str(self.sif or _cached_sif())
+
+    def describe(self) -> str:
+        """Say which image and engine are used, for the start of the log."""
+        return f"{self.image} in {'Docker' if self.engine == 'docker' else 'Apptainer'}"
+
+    def prepare(self, log: Callable[[str], None] = lambda message: None) -> None:
+        """Check that the engine works and the image is there, downloading it if needed.
+
+        Raises RuntimeError if the engine is missing or the image cannot be downloaded.
+        """
+        if self.engine == "docker":
+            _ensure_docker_image()
+            return
+        executable = _apptainer_executable()
+        if self.sif is not None:
+            if not self.sif.is_file():
+                raise RuntimeError(f"Apptainer image not found: {self.sif}")
+            return
+        target = _cached_sif()
+        if target.is_file():
+            return
+        log(f"Downloading the ANTs image for Apptainer into {target} (once only)")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        partial = target.with_name(target.name + ".partial")
+        partial.unlink(missing_ok=True)
+        pulled = subprocess.run(
+            [executable, "pull", str(partial), f"docker://{ANTS_IMAGE}"]
+        ).returncode
+        if pulled != 0:
+            partial.unlink(missing_ok=True)
+            raise RuntimeError(f"Could not download docker://{ANTS_IMAGE} with {executable}.")
+        partial.rename(target)  # only a complete download gets the real name
+
+    def runner(self, threads: int, scratch: Path) -> AntsRunner:
+        """Return what runs the ANTs tools for one scan."""
+        if self.engine == "docker":
+            return DockerAnts(threads, scratch)
+        return ApptainerAnts(threads, scratch, Path(self.image), _apptainer_executable())
+
+
+def _cached_sif() -> Path:
+    """Where the downloaded Apptainer image is kept: faceoff/ in your cache folder
+    ($XDG_CACHE_HOME, usually ~/.cache)."""
+    cache = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
+    return Path(cache) / "faceoff" / f"ants-{ANTS_IMAGE.rsplit(':', 1)[1]}.sif"
+
+
+def _apptainer_executable() -> str:
+    """Find the `apptainer` command, or `singularity` on systems that still use that name.
+
+    Raises RuntimeError if neither is installed.
+    """
+    for name in ("apptainer", "singularity"):
+        if found := shutil.which(name):
+            return found
+    raise RuntimeError("Neither apptainer nor singularity was found.")
+
+
+def _ensure_docker_image(image: str = ANTS_IMAGE) -> None:
     """Check that Docker works and the ANTs image is there, downloading it if needed.
 
     Raises RuntimeError if Docker is missing or the image cannot be downloaded.
     """
     if shutil.which("docker") is None:
-        raise RuntimeError("Docker not found. FaceOff runs ANTs from the Docker image " + image)
+        raise RuntimeError(
+            "Docker not found. FaceOff runs ANTs from the Docker image " + image
+            + "; on a cluster, try --engine apptainer."
+        )
     if subprocess.run(["docker", "image", "inspect", image], capture_output=True).returncode == 0:
         return
     if subprocess.run(["docker", "pull", image]).returncode != 0:

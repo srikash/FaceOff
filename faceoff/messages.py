@@ -9,7 +9,6 @@ from time import monotonic
 
 from rich.console import Console
 
-from .ants import ANTS_IMAGE
 from .deface import Options, Outputs, Reporter
 from .reorient import Crop
 from .template import TEMPLATE_CROP_Z
@@ -79,7 +78,10 @@ class ConsoleReporter(Reporter):
         yes_no = {True: "[green]yes[/]", False: "[dim]no[/]"}
         console.print(f"[bold]Input:[/bold] {input_file}", soft_wrap=True)
         console.print(f"[bold]Template:[/bold] {options.template.folder}", soft_wrap=True)
-        console.print(f"[bold]ANTs:[/bold] {ANTS_IMAGE} ({options.threads} threads)")
+        console.print(
+            f"[bold]ANTs:[/bold] {options.container.describe()} ({options.threads} threads)",
+            soft_wrap=True,
+        )
         console.print(
             f"[bold]Reorient:[/bold] {yes_no[options.reorient]}   "
             f"[bold]Crop (z {TEMPLATE_CROP_Z[0]}-{TEMPLATE_CROP_Z[1] - 1}):[/bold] "

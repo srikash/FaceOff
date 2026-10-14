@@ -9,7 +9,7 @@ from pathlib import Path
 import nibabel as nib
 
 from . import masking
-from .ants import AntsRunner, DockerAnts
+from .ants import AntsRunner, Container
 from .registration import Stage, register
 from .reorient import Crop, TalReorientation
 from .scratch import workspace
@@ -35,6 +35,8 @@ class Options:
     extra_images: tuple[Path, ...] = ()
     # The template to register to; the tests pass a small synthetic one.
     template: Template = field(default_factory=Template.default)
+    # How ANTs is run: Docker by default, or Apptainer/Singularity.
+    container: Container = field(default_factory=Container)
 
 
 @dataclass(frozen=True)
@@ -163,8 +165,8 @@ def run(
 ) -> Outputs:
     """Deface one scan and write the outputs next to it.
 
-    ANTs runs in Docker unless another way of running it is passed as `ants` (the tests do
-    this). Returns the names of the files written.
+    ANTs runs as `options.container` says (Docker by default), unless another way of running
+    it is passed as `ants` (the tests do this). Returns the names of the files written.
     """
     template = options.template
     subject, extras = check_inputs(input_file, options)
@@ -173,7 +175,7 @@ def run(
     reporter.begin(subject, options, outputs)
 
     with workspace() as ws:
-        ants = ants or DockerAnts(options.threads, scratch=ws.root)
+        ants = ants or options.container.runner(options.threads, scratch=ws.root)
 
         tx = register(ants, ws, subject, template, syn=options.syn, reface=options.reface)
         reporter.step("registration to the template")
