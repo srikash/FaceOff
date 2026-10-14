@@ -3,7 +3,19 @@ from pathlib import Path
 import pytest
 
 from faceoff import ants as ants_module
-from faceoff.ants import ApptainerAnts, Container, DockerAnts
+import sys
+
+from faceoff.ants import (
+    REQUIRED_TOOLS,
+    AntsError,
+    ApptainerAnts,
+    Container,
+    DockerAnts,
+    LocalAnts,
+)
+
+# conftest.py replaces `local_ants_available` in every test; keep the real one for its own test.
+REAL_LOCAL_ANTS_AVAILABLE = ants_module.local_ants_available
 
 
 def _mounts(cmd: list[str]) -> list[str]:
@@ -77,3 +89,65 @@ def test_image_file_needs_apptainer():
         Container("docker", Path("ants.sif"))
     with pytest.raises(ValueError, match="Unknown engine"):
         Container("podman")
+
+
+def test_local_command_is_just_the_tool_and_its_arguments():
+    assert LocalAnts(threads=2).command("antsRegistration", ["--version", Path("/a/b")]) == [
+        "antsRegistration", "--version", "/a/b",
+    ]
+
+
+def test_local_run_sets_the_thread_count_and_reports_failure(tmp_path):
+    out = tmp_path / "threads.txt"
+    code = f"import os; open({str(out)!r}, 'w').write(os.environ['ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS'])"
+    LocalAnts(threads=5).run(sys.executable, ["-c", code])
+    assert out.read_text() == "5"
+    with pytest.raises(AntsError, match="exit code 3"):
+        LocalAnts(threads=1).run(sys.executable, ["-c", "raise SystemExit(3)"])
+
+
+def test_local_ants_is_available_only_when_every_tool_is_on_the_path(monkeypatch):
+    monkeypatch.setattr(ants_module, "local_ants_available", REAL_LOCAL_ANTS_AVAILABLE)
+    monkeypatch.setattr(ants_module.shutil, "which", lambda name: f"/opt/ants/bin/{name}")
+    assert ants_module.local_ants_available()
+    monkeypatch.setattr(
+        ants_module.shutil, "which", lambda name: None if name == "antsAI" else "/x/" + name
+    )
+    assert not ants_module.local_ants_available()
+
+
+def test_local_prepare_names_the_missing_tools(monkeypatch):
+    monkeypatch.setattr(
+        ants_module.shutil, "which", lambda name: None if name == "antsAI" else "/x/" + name
+    )
+    with pytest.raises(RuntimeError, match="antsAI"):
+        Container("local").prepare()
+
+
+def test_local_prepare_logs_the_version_and_warns_when_it_differs(monkeypatch):
+    monkeypatch.setattr(ants_module.shutil, "which", lambda name: "/opt/ants/bin/" + name)
+    for output, expected in [
+        ("ANTs Version: 2.6.5.dev1-gabc\n", "Using ANTs 2.6.5.dev1-gabc"),
+        ("ANTs Version: 2.4.3\n", "tested with 2.6.5"),
+        ("no version here", "Could not read"),
+    ]:
+        monkeypatch.setattr(
+            ants_module.subprocess, "run",
+            lambda cmd, **kw: type("R", (), {"stdout": output})(),
+        )
+        messages: list[str] = []
+        Container("local").prepare(messages.append)
+        assert expected in messages[0]
+
+
+def test_local_container_builds_a_local_runner():
+    assert isinstance(Container("local").runner(threads=2, scratch=Path("/s")), LocalAnts)
+    assert set(REQUIRED_TOOLS) == {"antsAI", "antsRegistration", "antsApplyTransforms", "ConvertTransformFile"}
+
+
+def test_default_container_is_local_when_the_tools_exist_otherwise_docker(monkeypatch):
+    monkeypatch.setattr(ants_module, "local_ants_available", lambda: True)
+    assert Container.default() == Container("local")
+    monkeypatch.setattr(ants_module, "local_ants_available", lambda: False)
+    assert Container.default() == Container("docker")
+    assert Container() == Container("docker")  # a bare Container() is always Docker

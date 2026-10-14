@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "faceoff"
 version = "2.0.0"
-description = "MRI defacing tool using ANTs (Docker) registration to an MNI152 template"
+description = "MRI defacing tool using ANTs registration (your own install, Docker, or Apptainer) to an MNI152 template"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -16,6 +16,7 @@ dependencies = [
     "rich-click>=1.9,<2",
     "numpy>=1.26",
     "nibabel>=5",
+    "pillow>=10",
 ]
 
 [project.scripts]

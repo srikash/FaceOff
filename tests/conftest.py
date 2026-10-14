@@ -10,7 +10,7 @@ from faceoff.template import Template
 
 
 def write_template(folder: Path, affine: np.ndarray | None = None, shape=(8, 8, 8)) -> Template:
-    """Write the four template files (tiny, filled with simple values) into `folder`."""
+    """Write the five template files (tiny, filled with simple values) into `folder`."""
     folder.mkdir(parents=True, exist_ok=True)
     template = Template(folder)
     affine = np.eye(4) if affine is None else affine
@@ -21,9 +21,16 @@ def write_template(folder: Path, affine: np.ndarray | None = None, shape=(8, 8, 
         (template.brain_mask, brain),
         (template.reface_mask, np.ones(shape, np.uint8)),
         (template.face_mask, np.zeros(shape, np.uint8)),
+        (template.eye_mask, np.zeros(shape, np.uint8)),
     ]:
         nib.save(nib.Nifti1Image(data, affine), path)
     return template
+
+
+@pytest.fixture(autouse=True)
+def no_local_ants_unless_a_test_says_so(monkeypatch):
+    """Tests must not depend on whether this machine has ANTs on its PATH."""
+    monkeypatch.setattr("faceoff.ants.local_ants_available", lambda: False)
 
 
 @pytest.fixture

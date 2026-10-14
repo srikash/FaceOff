@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from faceoff import ants as ants_module
 from faceoff import cli as cli_module
 from faceoff.ants import AntsError
 
@@ -17,6 +18,7 @@ def runs(monkeypatch):
         if Path(path).name.startswith("bad"):
             raise AntsError("antsRegistration failed (exit code 1).")
 
+    monkeypatch.setattr(ants_module, "local_ants_available", lambda: False)
     monkeypatch.setattr(cli_module.Container, "prepare", lambda self, log: None)
     monkeypatch.setattr(cli_module, "ensure_template", lambda log: None)
     monkeypatch.setattr(cli_module.deface, "run", fake_run)
@@ -49,6 +51,22 @@ def test_flags_reach_the_defacing(tmp_path, runs):
     assert (options.threads, options.reface, options.crop, options.reorient, options.syn) == (
         3, True, False, True, False,
     )
+
+
+def test_eye_flags_reach_the_defacing(tmp_path, runs):
+    result = CliRunner().invoke(cli_module.cli, ["-i", _scan(tmp_path, "a.nii.gz"), "--renucleate"])
+    assert result.exit_code == 0, result.output
+    [(_, options)] = runs
+    assert (options.enucleate, options.renucleate) == (False, True)
+    assert options.remove_eyes and options.refill
+
+
+def test_qc_is_on_by_default_and_no_qc_turns_it_off(tmp_path, runs):
+    scan = _scan(tmp_path, "a.nii.gz")
+    CliRunner().invoke(cli_module.cli, ["-i", scan])
+    CliRunner().invoke(cli_module.cli, ["-i", scan, "--no-qc"])
+    CliRunner().invoke(cli_module.cli, ["-i", scan, "--qc"])
+    assert [options.qc for _, options in runs] == [True, False, True]
 
 
 def test_batch_continues_after_a_failure_and_exits_1(tmp_path, runs):
@@ -134,6 +152,30 @@ def test_docker_is_the_default_engine(tmp_path, runs):
     assert result.exit_code == 0, result.output
     [(_, options)] = runs
     assert options.container.engine == "docker"
+
+
+def test_own_ants_is_used_when_its_tools_are_on_the_path(tmp_path, runs, monkeypatch):
+    monkeypatch.setattr(ants_module, "local_ants_available", lambda: True)
+    result = CliRunner().invoke(cli_module.cli, ["-i", _scan(tmp_path, "a.nii.gz")])
+    assert result.exit_code == 0, result.output
+    assert runs[0][1].container.engine == "local"
+
+
+def test_engine_flag_beats_the_ants_on_the_path(tmp_path, runs, monkeypatch):
+    monkeypatch.setattr(ants_module, "local_ants_available", lambda: True)
+    scan = _scan(tmp_path, "a.nii.gz")
+    CliRunner().invoke(cli_module.cli, ["-i", scan, "--engine", "docker"])
+    assert runs[0][1].container.engine == "docker"
+    CliRunner().invoke(cli_module.cli, ["-i", scan, "--engine", "local"])
+    assert runs[1][1].container.engine == "local"
+
+
+def test_sif_is_refused_with_local(tmp_path, runs):
+    result = CliRunner().invoke(cli_module.cli, [
+        "-i", _scan(tmp_path, "a.nii.gz"), "--engine", "local", "--sif", _scan(tmp_path, "x.sif"),
+    ])
+    assert result.exit_code == 2
+    assert "--engine local" in result.output
 
 
 def test_sif_is_refused_with_docker(tmp_path, runs):

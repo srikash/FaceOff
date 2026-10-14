@@ -87,11 +87,14 @@ class ConsoleReporter(Reporter):
             f"[bold]Crop (z {TEMPLATE_CROP_Z[0]}-{TEMPLATE_CROP_Z[1] - 1}):[/bold] "
             f"{yes_no[options.crop and options.reorient]}   "
             f"[bold]Reface:[/bold] {yes_no[options.reface]}   "
+            f"[bold]Enucleate:[/bold] {yes_no[options.remove_eyes]}   "
+            f"[bold]Renucleate:[/bold] {yes_no[options.renucleate]}   "
+            f"[bold]QC:[/bold] {yes_no[options.qc]}   "
             f"[bold]SyN:[/bold] {yes_no[options.syn]}"
         )
         console.print()
         quote("It's like looking in a mirror, only… not.", "Face/Off (1997)")
-        if options.syn or options.reface:
+        if options.syn or options.refill:
             console.print()
             quote(
                 "Looks like you're going to be in here for the next hundred years.",

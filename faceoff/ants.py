@@ -1,9 +1,10 @@
-"""Run ANTs tools from the antsx/ants container image, so ANTs need not be installed.
+"""Run ANTs tools: from your own ANTs install, or from the antsx/ants container image.
 
-The image runs in Docker (`DockerAnts`) or, on clusters without Docker, in Apptainer or
+If the ANTs tools FaceOff needs are on your PATH, `LocalAnts` runs them directly. Otherwise the
+image runs in Docker (`DockerAnts`) or, on clusters without Docker, in Apptainer or
 Singularity (`ApptainerAnts`); `Container` says which. `RecordingAnts` only writes the
-commands down, for the tests. Each folder named in a command is made visible inside the
-container at the same path, so commands look exactly as they would with a local ANTs. The
+commands down, for the tests. Each folder named in a container command is made visible inside
+the container at the same path, so commands look exactly as they would with a local ANTs. The
 container can only write to the run's temporary folder.
 """
 
@@ -19,7 +20,10 @@ from pathlib import Path
 from typing import Protocol
 
 ANTS_IMAGE = "antsx/ants:2.6.5"
-ENGINES = ("docker", "apptainer")
+ANTS_VERSION = ANTS_IMAGE.rsplit(":", 1)[1]
+ENGINES = ("docker", "apptainer", "local")
+# The ANTs tools FaceOff runs (see registration.py and reorient.py).
+REQUIRED_TOOLS = ("antsAI", "antsRegistration", "antsApplyTransforms", "ConvertTransformFile")
 
 
 class AntsError(RuntimeError):
@@ -32,6 +36,24 @@ class AntsRunner(Protocol):
     def run(self, tool: str, args: Sequence[str | Path]) -> None:
         """Run `tool` (for example "antsRegistration") with `args`. Raises AntsError if it
         fails."""
+
+
+class LocalAnts:
+    """Run ANTs tools straight from your own ANTs install (the tools on your PATH)."""
+
+    def __init__(self, threads: int) -> None:
+        self.threads = threads
+
+    def command(self, tool: str, args: Sequence[str | Path]) -> list[str]:
+        """Return the command for one ANTs tool."""
+        return [tool, *(str(a) for a in args)]
+
+    def run(self, tool: str, args: Sequence[str | Path]) -> None:
+        """Run `tool` with `args`. Raises AntsError if it fails."""
+        env = {**os.environ, "ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS": str(self.threads)}
+        returncode = subprocess.run(self.command(tool, args), env=env).returncode
+        if returncode != 0:
+            raise AntsError(f"{tool} failed (exit code {returncode}).")
 
 
 class DockerAnts:
@@ -132,7 +154,9 @@ class RecordingAnts:
 
 @dataclass(frozen=True)
 class Container:
-    """How ANTs is run: in Docker (the default), or in Apptainer or Singularity.
+    """How ANTs is run: in Docker, in Apptainer or Singularity, or from your own ANTs install
+    ("local"). `Container()` is Docker; `Container.default()` is what FaceOff uses when you
+    choose nothing: your own ANTs if its tools are on your PATH, otherwise Docker.
 
     `sif` is an Apptainer image file you already have. Without one, FaceOff downloads the
     ANTs image into a file in your cache folder the first time, and reuses it after that.
@@ -141,22 +165,33 @@ class Container:
     engine: str = "docker"
     sif: Path | None = None
 
+    @classmethod
+    def default(cls) -> Container:
+        """Return the container FaceOff uses when none is chosen: local if every ANTs tool it
+        needs is on your PATH, otherwise Docker. Checked each time, not remembered."""
+        return cls("local" if local_ants_available() else "docker")
+
     def __post_init__(self) -> None:
         """Refuse an unknown engine, or an image file with Docker."""
         if self.engine not in ENGINES:
-            raise ValueError(f"Unknown engine {self.engine!r}; use docker or apptainer.")
+            raise ValueError(f"Unknown engine {self.engine!r}; use docker, apptainer or local.")
         if self.sif is not None and self.engine != "apptainer":
             raise ValueError("An image file (--sif) needs --engine apptainer.")
 
     @property
     def image(self) -> str:
-        """The image ANTs runs from: the Docker image name, or the Apptainer image file."""
+        """The image ANTs runs from: the Docker image name, or the Apptainer image file. Local
+        ANTs has no image, so this is the folder of its tools."""
+        if self.engine == "local":
+            return str(Path(shutil.which(REQUIRED_TOOLS[1]) or REQUIRED_TOOLS[1]).parent)
         if self.engine == "docker":
             return ANTS_IMAGE
         return str(self.sif or _cached_sif())
 
     def describe(self) -> str:
         """Say which image and engine are used, for the start of the log."""
+        if self.engine == "local":
+            return f"ANTs from your PATH ({self.image})"
         return f"{self.image} in {'Docker' if self.engine == 'docker' else 'Apptainer'}"
 
     def prepare(self, log: Callable[[str], None] = lambda message: None) -> None:
@@ -164,6 +199,9 @@ class Container:
 
         Raises RuntimeError if the engine is missing or the image cannot be downloaded.
         """
+        if self.engine == "local":
+            _check_local_ants(log)
+            return
         if self.engine == "docker":
             _ensure_docker_image()
             return
@@ -189,9 +227,46 @@ class Container:
 
     def runner(self, threads: int, scratch: Path) -> AntsRunner:
         """Return what runs the ANTs tools for one scan."""
+        if self.engine == "local":
+            return LocalAnts(threads)
         if self.engine == "docker":
             return DockerAnts(threads, scratch)
         return ApptainerAnts(threads, scratch, Path(self.image), _apptainer_executable())
+
+
+def local_ants_available() -> bool:
+    """Return True when every ANTs tool FaceOff needs is on your PATH."""
+    return all(shutil.which(tool) for tool in REQUIRED_TOOLS)
+
+
+def _check_local_ants(log: Callable[[str], None]) -> None:
+    """Check that your ANTs install has every tool FaceOff needs, and log its version.
+
+    A version other than the one FaceOff is tested with only gives a warning.
+    Raises RuntimeError if a tool is missing.
+    """
+    missing = [tool for tool in REQUIRED_TOOLS if shutil.which(tool) is None]
+    if missing:
+        raise RuntimeError(
+            f"ANTs tools not found on your PATH: {', '.join(missing)}. Install ANTs, or run "
+            "it from Docker or Apptainer with --engine."
+        )
+    try:
+        output = subprocess.run(
+            ["antsRegistration", "--version"], capture_output=True, text=True, timeout=30
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        output = ""
+    found = re.search(r"Version:\s*(\S+)", output)
+    if found is None:
+        log("[yellow]Could not read the version of your ANTs install.[/]")
+    elif not found.group(1).startswith(ANTS_VERSION):
+        log(
+            f"[yellow]Your ANTs is version {found.group(1)}; FaceOff is tested with "
+            f"{ANTS_VERSION}. Results can differ slightly.[/]"
+        )
+    else:
+        log(f"Using ANTs {found.group(1)} from your PATH")
 
 
 def _cached_sif() -> Path:
@@ -220,7 +295,7 @@ def _ensure_docker_image(image: str = ANTS_IMAGE) -> None:
     if shutil.which("docker") is None:
         raise RuntimeError(
             "Docker not found. FaceOff runs ANTs from the Docker image " + image
-            + "; on a cluster, try --engine apptainer."
+            + "; on a cluster, try --engine apptainer, or put your own ANTs on your PATH."
         )
     if subprocess.run(["docker", "image", "inspect", image], capture_output=True).returncode == 0:
         return

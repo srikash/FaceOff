@@ -1,6 +1,6 @@
 # Installation
 
-FaceOff needs Python 3.12 or newer, and either Docker running or Apptainer (or Singularity) installed. It runs ANTs from a container image, so you don't install ANTs yourself.
+FaceOff needs Python 3.12 or newer, and a way to run ANTs: ANTs itself on your PATH, Docker running, or Apptainer (or Singularity) installed. Without your own ANTs it runs ANTs from a container image, so you don't have to install it.
 
 ## venv
 
@@ -31,7 +31,15 @@ faceoff --help
 
 You can also run it from the checkout without installing it, as long as its dependencies are installed: `python -m faceoff --help`.
 
+## If you already have ANTs
+
+When `antsAI`, `antsRegistration`, `antsApplyTransforms`, and `ConvertTransformFile` are all on your PATH, FaceOff uses them directly. It downloads no image and needs no container engine. The log says which ANTs it found and warns if the version is not 2.6.5, the one FaceOff is tested with.
+
+To choose for yourself, use `--engine local` (your install, or an error naming the missing tools) or `--engine docker`.
+
 ## The ANTs image
+
+You only need this without your own ANTs.
 
 FaceOff pulls `antsx/ants:2.6.5` the first time you run it. To fetch it in advance:
 

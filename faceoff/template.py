@@ -1,8 +1,8 @@
 """The template FaceOff registers to: a modified version of the MNI ICBM152 2020 template.
 
-Everything FaceOff needs to know about the template is answered here: where its files are,
-where the centre of its brain is, and which part of it the template-orientation outputs are
-trimmed to.
+Everything FaceOff needs to know about the template is answered here: where its five files
+are (T1w, brain mask, face mask, eye mask, reface mask), where the centre of its brain is,
+and which part of it the template-orientation outputs are trimmed to.
 """
 
 from __future__ import annotations
@@ -19,8 +19,9 @@ import numpy as np
 from .template_files import PREFIX, ZENODO_RECORD, fetch_missing, is_complete
 
 # Template slices (voxel indices along z, end exclusive) kept in the template-orientation
-# outputs unless --no-crop is given.
-TEMPLATE_CROP_Z = (70, 264)
+# outputs unless --no-crop is given. The template has 50 padding slices at the bottom of z,
+# so this range starts 50 slices higher than it would on the unpadded MNI grid.
+TEMPLATE_CROP_Z = (120, 314)
 
 _BUNDLED_DIR = Path(__file__).resolve().parent / "data"
 
@@ -57,13 +58,18 @@ class Template:
 
     @property
     def reface_mask(self) -> Path:
-        """The region the refacing registration (SyN) is fitted over."""
+        """The region the refacing registration (SyN) is fitted over (--reface and --renucleate)."""
         return self.folder / f"{PREFIX}reface_mask.nii.gz"
 
     @property
     def face_mask(self) -> Path:
-        """The face and ears: 1 = remove, 0 = keep."""
+        """The face: 1 = remove, 0 = keep."""
         return self.folder / f"{PREFIX}face_mask.nii.gz"
+
+    @property
+    def eye_mask(self) -> Path:
+        """The eyes: 1 = remove (with --enucleate or --renucleate), 0 = keep."""
+        return self.folder / f"{PREFIX}eye_mask.nii.gz"
 
     @cached_property
     def brain_centre_lps(self) -> np.ndarray:

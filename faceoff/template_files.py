@@ -1,4 +1,4 @@
-"""The four template files, their published checksums, and how to download them from Zenodo.
+"""The five template files, their published checksums, and how to download them from Zenodo.
 
 This file uses only Python's standard library, so `bundle_template.py` can run it while the
 pip package is being built.
@@ -17,10 +17,11 @@ PREFIX = "faceoff2_mni152_version-ext2020sym_desc-"
 
 # File name -> md5, as published on https://zenodo.org/records/23328835
 TEMPLATE_FILES = {
-    f"{PREFIX}T1w_ref.nii.gz": "b96f7d55213cf2164ac90332b4c4b0ee",
-    f"{PREFIX}brain_mask.nii.gz": "e83d203ab5d42ba09dcf7c251ffb8a71",
-    f"{PREFIX}reface_mask.nii.gz": "621a213af921a0987a42bd7c38d7547e",
-    f"{PREFIX}face_mask.nii.gz": "44e883687d0cccd494769a48c416dcc6",
+    f"{PREFIX}T1w_ref.nii.gz": "1bbbb937be0e4ce32735d852227badb7",
+    f"{PREFIX}brain_mask.nii.gz": "8010828775ebc2e25c0fa974e092d228",
+    f"{PREFIX}reface_mask.nii.gz": "d95fb477b828bb17c2500f37e7add444",
+    f"{PREFIX}face_mask.nii.gz": "217289e47ede4d62d950d496946c7d88",
+    f"{PREFIX}eye_mask.nii.gz": "9194b6e32bb7f3901fb26226d1210acd",
 }
 
 

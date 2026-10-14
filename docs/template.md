@@ -1,6 +1,6 @@
 # The template and the MNI licence
 
-FaceOff registers your scan to a modified version of the MNI ICBM152 2020 extended symmetric template. The four modified files (about 7.7 MB) are published on [Zenodo](https://doi.org/10.5281/zenodo.23328835).
+FaceOff registers your scan to a modified version of the MNI ICBM152 2020 extended symmetric template. The five modified files (about 9 MB: the T1w reference and the brain, face, eye, and reface masks) are published on [Zenodo](https://doi.org/10.5281/zenodo.23328835).
 
 ## Where FaceOff finds the files
 

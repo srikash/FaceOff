@@ -117,7 +117,7 @@ def test_images_on_the_same_grid_get_the_same_crop(tmp_path):
     pairs = []
     for name in ("a", "b"):
         path = tmp_path / f"{name}.nii.gz"
-        nib.save(nib.Nifti1Image(np.zeros((4, 4, 300), np.int16), affine), path)
+        nib.save(nib.Nifti1Image(np.zeros((4, 4, 400), np.int16), affine), path)
         pairs.append((path, tmp_path / f"{name}_tal.nii.gz"))
     first, second = TalReorientation(np.eye(4), template).write_images(pairs, crop=True)
-    assert first == second and (first.first, first.last) == (70, 264)
+    assert first == second and (first.first, first.last) == (120, 314)

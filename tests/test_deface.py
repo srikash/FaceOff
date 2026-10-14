@@ -1,6 +1,8 @@
 """deface.run end to end, with a fake ANTs that writes plausible outputs and a synthetic
 template."""
 
+import re
+
 import nibabel as nib
 import numpy as np
 import pytest
@@ -16,7 +18,8 @@ class FakeAnts:
 
     - face mask: 1 where x < 2;
     - template T1w: 50 over the face (x < 2) and 20 elsewhere;
-    - brain mask: 1 where x >= 2.
+    - brain mask: 1 where x >= 2;
+    - eye mask: 1 where x == 2.
     """
 
     def __init__(self) -> None:
@@ -31,7 +34,10 @@ class FakeAnts:
             grid = nib.load(reference)
             face = np.zeros(grid.shape[:3], np.float32)
             face[:2] = 1
-            if "T1w_ref" in moving:
+            if "eye_mask" in moving:
+                data = np.zeros(grid.shape[:3], np.float32)
+                data[2] = 1
+            elif "T1w_ref" in moving:
                 data = np.where(face > 0, 50, 20)
             elif "brain_mask" in moving:
                 data = 1 - face
@@ -76,6 +82,67 @@ def test_extra_images_and_tal_mask(tmp_path, template):
     assert ants.references[2].endswith("grid_for_face_mask_in_extra1.nii.gz")
 
 
+def test_enucleate_removes_the_eyes_too(tmp_path, template):
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    plain = deface.run(subject, deface.Options(threads=1, crop=False, template=template), ants=FakeAnts())
+    assert (np.asanyarray(nib.load(plain.defaced).dataobj)[2] == 7).all()
+    options = deface.Options(threads=1, crop=False, enucleate=True, template=template)
+    outputs = deface.run(subject, options, ants=FakeAnts())
+    defaced = np.asanyarray(nib.load(outputs.defaced).dataobj)
+    assert (defaced[:3] == 0).all() and (defaced[3:] == 7).all()
+    assert outputs.refaced is None
+
+
+def test_renucleate_puts_back_only_the_eyes(tmp_path, template):
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    options = deface.Options(threads=1, crop=False, renucleate=True, template=template)
+    outputs = deface.run(subject, options, ants=FakeAnts())
+    refaced = np.asanyarray(nib.load(outputs.refaced).dataobj)
+    np.testing.assert_allclose(refaced[:2], 0)  # the face stays removed
+    np.testing.assert_allclose(refaced[2], 7)  # template eyes: 20 * (7 / 20)
+    np.testing.assert_allclose(refaced[3:], 7)
+    assert (np.asanyarray(nib.load(outputs.defaced).dataobj)[:3] == 0).all()
+
+
+def test_reface_with_renucleate_puts_back_face_and_eyes(tmp_path, template):
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    options = deface.Options(threads=1, crop=False, reface=True, renucleate=True, template=template)
+    refaced = np.asanyarray(nib.load(deface.run(subject, options, ants=FakeAnts()).refaced).dataobj)
+    np.testing.assert_allclose(refaced[:2], 17.5)  # template face
+    np.testing.assert_allclose(refaced[2:], 7)
+
+
+def _titles(path):
+    html = path.read_text()
+    return re.findall(r"<span>(.*?)</span>", html), html.count("<img")
+
+
+def test_qc_page_is_written_by_default_with_the_defaced_scan_only(tmp_path, template):
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    options = deface.Options(threads=1, crop=False, template=template)
+    outputs = deface.run(subject, options, ants=FakeAnts())
+    assert outputs.qc == tmp_path / "t1_faceoff_qc.html" and outputs.qc in outputs.written()
+    assert _titles(outputs.qc) == (["defaced"], 1)
+
+
+def test_qc_page_adds_refaced_with_reface_or_renucleate_and_a_gif_per_extra(tmp_path, template):
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    extra = _save(tmp_path / "inv1.nii.gz", np.full((6, 5, 4), 5, np.int16))
+    for flags in ({"reface": True}, {"renucleate": True}):
+        options = deface.Options(
+            threads=1, crop=False, qc=True, extra_images=(extra,), template=template, **flags
+        )
+        outputs = deface.run(subject, options, ants=FakeAnts())
+        assert _titles(outputs.qc) == (["defaced", "refaced", "defaced"], 2)
+
+
+def test_no_qc_page_with_no_qc(tmp_path, template):
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    options = deface.Options(threads=1, crop=False, qc=False, template=template)
+    outputs = deface.run(subject, options, ants=FakeAnts())
+    assert outputs.qc is None and not list(tmp_path.glob("*_faceoff_qc.html"))
+
+
 def test_reface_fills_the_face_with_the_scaled_template(tmp_path, template):
     subject = _save(tmp_path / "t1w.nii.gz", np.full((6, 5, 4), 7, np.int16))
     options = deface.Options(threads=1, reface=True, crop=False, template=template)
@@ -107,12 +174,12 @@ class RecordingReporter(deface.Reporter):
 
 
 def test_crop_is_reported_once_and_applied_to_the_tal_outputs(tmp_path, template):
-    subject = _save(tmp_path / "t1w.nii.gz", np.full((6, 5, 300), 7, np.int16))
+    subject = _save(tmp_path / "t1w.nii.gz", np.full((6, 5, 400), 7, np.int16))
     reporter = RecordingReporter()
 
     outputs = deface.run(subject, deface.Options(threads=1, template=template), reporter, FakeAnts())
 
-    assert reporter.crops == [Crop(axis=2, first=70, last=264, size=300)]
+    assert reporter.crops == [Crop(axis=2, first=120, last=314, size=400)]
     for path in (outputs.tal_defaced, outputs.tal_deface_mask):
         assert nib.load(path).shape == (6, 5, 194)
 

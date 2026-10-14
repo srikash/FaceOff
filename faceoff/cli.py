@@ -50,7 +50,11 @@ rich_click_config.OPTION_GROUPS = {
             "title_style": f"bold {_BATCH}",
             "panel_styles": {"border_style": _BATCH},
         },
-        {"name": "Outputs", "options": ["--reorient", "--crop", "--reface"], "title_style": "bold"},
+        {
+            "name": "Outputs",
+            "options": ["--reorient", "--crop", "--reface", "--enucleate", "--renucleate", "--qc"],
+            "title_style": "bold",
+        },
         {"name": "How ANTs runs", "options": ["--engine", "--sif"], "title_style": "bold"},
         {
             "name": "Optional flags",
@@ -105,6 +109,22 @@ class FaceOffCommand(RichCommand):
                 "Also writes [green]_refaced[/] and [green]_tal_refaced[/], with the template's "
                 "face in place of the removed one.",
             ),
+            panel(
+                "Eyes",
+                f"{_EXAMPLE} [bold cyan]--enucleate[/]\n"
+                "Also removes the eyes from [green]_defaced[/] and [green]_defaceMask[/].\n\n"
+                f"{_EXAMPLE} [bold cyan]--renucleate[/]\n"
+                "Also writes [green]_refaced[/] and [green]_tal_refaced[/], with the template's "
+                "eyes in place of the removed ones (add [bold cyan]--reface[/] for the face too).",
+            ),
+            panel(
+                "QC page",
+                f"{_EXAMPLE}\n"
+                "Also writes [green]_faceoff_qc.html[/], unless you pass [bold cyan]--no-qc[/]: "
+                "a GIF that sweeps through the sagittal slices of the defaced scan, and of the "
+                "refaced one with [bold cyan]--reface[/] or "
+                "[bold cyan]--renucleate[/]. Extra images get a GIF of their own.",
+            ),
             _extra_images_or_batch(),
             panel(
                 "Many MP2RAGE or GRE sessions",
@@ -116,6 +136,13 @@ class FaceOffCommand(RichCommand):
                 "[bold cyan]--extra-images[/] "
                 "[green]\"${uni%_UNIT1.nii.gz}\"_inv-*_MP2RAGE.nii.gz[/]\n"
                 "[bold white]done[/]",
+            ),
+            panel(
+                "Your own ANTs",
+                f"{_EXAMPLE}\n"
+                "Uses the ANTs tools on your PATH when it finds them, with no container. "
+                "Force it with [bold cyan]--engine local[/], or use a container with "
+                "[bold cyan]--engine docker[/].",
             ),
             panel(
                 "On a cluster (Apptainer or Singularity)",
@@ -207,8 +234,8 @@ def _deface_with_timer(path: Path, options: deface.Options) -> None:
     name="faceoff",
     cls=FaceOffCommand,
     help=(
-        "Deface anatomical MRI scans using ANTs in Docker or Apptainer, with optional "
-        "reorientation to MNI152 template space and optional refacing."
+        "Deface anatomical MRI scans using ANTs from your own install, Docker or Apptainer, "
+        "with optional reorientation to MNI152 template space and optional refacing."
     ),
     epilog=CITATION_NOTICE,
     no_args_is_help=True,
@@ -243,7 +270,22 @@ def _deface_with_timer(path: Path, options: deface.Options) -> None:
 )
 @click.option(
     "--reface", is_flag=True,
-    help="Also write a refaced scan, with the template's face in place of the removed one.",
+    help="Also write a refaced scan, with the template's face in place of the removed one. "
+    "Add --renucleate to put the template's eyes back too.",
+)
+@click.option(
+    "--enucleate", is_flag=True,
+    help="Also remove the eyes, using the template's eye mask.",
+)
+@click.option(
+    "--renucleate", is_flag=True,
+    help="Also put the template's eyes in place of the removed ones, as --reface does for the "
+    "face. Implies --enucleate and writes the refaced files.",
+)
+@click.option(
+    "--qc/--no-qc", default=True, show_default=True,
+    help="Write a QC page (scan_faceoff_qc.html): a GIF sweeping through the sagittal slices of "
+    "the defaced scan, and of the refaced scan when one is written, for each image.",
 )
 @click.option(
     "-n", "--threads", type=int, default=None, metavar="N", callback=_at_least_one,
@@ -257,8 +299,9 @@ def _deface_with_timer(path: Path, options: deface.Options) -> None:
 )
 @click.option(
     "--engine", type=click.Choice(ENGINES), default=None,
-    help="Run ANTs in Docker or Apptainer. Apptainer falls back to the singularity command "
-    "if that is what your system has. Default: apptainer with --sif, otherwise docker.",
+    help="Where ANTs runs: local (your own install), docker, or apptainer. Apptainer falls "
+    "back to the singularity command if that is what your system has. Default: apptainer with "
+    "--sif; your own install if its tools are on your PATH; otherwise docker.",
 )
 @click.option(
     "--sif", type=click.Path(path_type=Path, exists=True, dir_okay=False), metavar="FILE",
@@ -276,6 +319,9 @@ def cli(
     reorient: bool,
     crop: bool,
     reface: bool,
+    enucleate: bool,
+    renucleate: bool,
+    qc: bool,
     threads: int | None,
     syn: bool,
     engine: str | None,
@@ -296,9 +342,9 @@ def cli(
         )
     extras = _split_names([*extra_images, *context.args]) if extra_images else ()
     files = _split_names([batch, *context.args]) if batch else (input_file,)
-    if sif and engine == "docker":
-        raise click.UsageError("--sif is an Apptainer image; use it without --engine docker.")
-    container = Container(engine or ("apptainer" if sif else "docker"), sif)
+    if sif and engine in ("docker", "local"):
+        raise click.UsageError(f"--sif is an Apptainer image; use it without --engine {engine}.")
+    container = Container(engine or "apptainer", sif) if engine or sif else Container.default()
     if extras:  # catch a mistyped extra image before ANTs or the template are fetched
         try:
             deface.check_inputs(input_file, deface.Options(threads=1, extra_images=extras))
@@ -317,7 +363,7 @@ def cli(
 
     options = deface.Options(
         threads=_resolve_threads(threads), syn=syn, reorient=reorient, crop=crop, reface=reface,
-        extra_images=extras, container=container,
+        enucleate=enucleate, renucleate=renucleate, qc=qc, extra_images=extras, container=container,
     )
     if len(files) > 1:
         quote("This is turning into a real marriage.", "Face/Off (1997)")
