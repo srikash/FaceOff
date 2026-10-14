@@ -20,7 +20,6 @@ faceoff/scratch.py      the temporary folder for each run
 faceoff/template.py     the template: its files, brain centre and crop range; template_files.py downloads it
 bundle_template.py      puts the template files into the pip package when it is built
 tests/                  automated tests
-registration_review/    the exact ANTs commands each mode runs
 ```
 
 [Back to the README](../README.md)

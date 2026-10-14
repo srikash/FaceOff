@@ -1,10 +1,17 @@
 # FaceOff [![Version](https://img.shields.io/badge/version-2.0.0-purple.svg)](https://github.com/srikash/FaceOff/releases/tag/v2.0.0) [![Licence](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE) [![DOI](https://zenodo.org/badge/307797054.svg)](https://zenodo.org/badge/latestdoi/307797054)
 
-Deface anatomical MRI scans using ANTs in Docker. FaceOff blanks out the face and ears and leaves the brain alone. By default it also writes a copy reoriented to MNI152 template space (header only, no resampling), and `--reface` can put the template's face in place of the removed one.
+Deface anatomical MRI scans with ANTs, run in Docker so you don't have to install it. FaceOff registers each scan to an MNI152 template, then removes the face and ears and leaves the brain untouched.
+
+- It saves the rotation to template orientation as ITK and FSL transforms, and writes reoriented copies trimmed to the head. Only the header changes; nothing is resampled.
+- `--reface` puts the template's face in place of the removed one.
+- `--extra-images` gives other images from the same session (MP2RAGE, multi-echo GRE) the same mask.
+- `--batch` defaces many scans in one go.
+
+![](https://gitlab.com/skash/images-and-gifs/-/raw/master/face-off/faceoff.gif)
 
 ## Install
 
-You need Python 3.12 or newer, and Docker running. You don't need to install ANTs.
+You need Python 3.12 or newer, and Docker running.
 
 ```bash
 pip install faceoff
