@@ -55,7 +55,7 @@ pip install .
 faceoff --help
 ```
 
-You can also run it from the checkout without installing: `python -m faceoff --help`.
+You can also run it from the checkout without installing it, as long as its dependencies are installed: `python -m faceoff --help`.
 
 ### The ANTs image
 
@@ -69,7 +69,7 @@ docker pull antsx/ants:2.6.5
 
 The four template files (about 7.7 MB, a modified version of the MNI152 2020 template) come with `pip install faceoff`, so there is nothing more to download. They are published on [Zenodo](https://doi.org/10.5281/zenodo.23328835).
 
-If you run FaceOff straight from a checkout without installing it (`python -m faceoff`), it downloads the files from Zenodo the first time, checks them against their published checksums, and keeps them in `~/.cache/faceoff/zenodo-23328835/`. Set `FACEOFF_TEMPLATE_DIR` to use a folder of your own.
+If you run FaceOff straight from a checkout without installing it (`python -m faceoff`), it downloads the files from Zenodo the first time, checks them against their published checksums, and keeps them in `faceoff/zenodo-23328835/` inside your cache folder (`$XDG_CACHE_HOME` if set, usually `~/.cache`). Set `FACEOFF_TEMPLATE_DIR` to use a folder of your own.
 
 ## Quick start
 
@@ -79,7 +79,9 @@ faceoff -i sub-01_T1w.nii.gz --reface
 faceoff -i sub-01_T1w.nii.gz --no-reorient
 faceoff -i sub-01_T1w.nii.gz --no-crop -n 4
 faceoff --batch sub-01_T1w.nii.gz,sub-02_T1w.nii.gz
+faceoff --batch sub-*_T1w.nii.gz
 faceoff -i sub-01_UNIT1.nii.gz --extra-images sub-01_inv-1_MP2RAGE.nii.gz,sub-01_inv-2_MP2RAGE.nii.gz
+faceoff -i sub-01_UNIT1.nii.gz --extra-images sub-01_inv-*_MP2RAGE.nii.gz
 ```
 
 Input files must be `.nii` or `.nii.gz`. Outputs are written next to the input file.
@@ -89,17 +91,40 @@ Input files must be `.nii` or `.nii.gz`. Outputs are written next to the input f
 | Option | What it does |
 | --- | --- |
 | `-i`, `--input FILE` | The scan to deface. |
-| `--batch FILES` | Several scans, separated by commas, processed one after another. If one fails, the rest still run. Use this or `-i`, not both. |
-| `--extra-images FILES` | Other images from the same session and scanner space as `-i`, separated by commas: for example the other MP2RAGE images, or the echoes of a multi-echo GRE (4D files are fine). They get the same deface mask and reorientation as `-i`, but no new face. Use with `-i`, not `--batch`. |
-| `-n`, `--threads N` | Number of threads. The default is every core on the machine. |
-| `--reorient` / `--no-reorient` | Write the defaced scan in template orientation (the default). With `--no-reorient` you still get the transform files, but no reoriented image. |
-| `--crop` / `--no-crop` | Trim the reoriented image to template slices 70 to 263 along z (the default). Whole slices are dropped, and nothing is resampled. |
+| `--batch FILES` | Several separate scans, each registered and defaced on its own. If ANTs fails on one, or a file is missing, the others still run. Use this or `-i`, not both. |
+| `--extra-images FILES` | Other images from the same session and scanner space as `-i`: for example the other MP2RAGE images, or the echoes of a multi-echo GRE (4D files are fine). They get the same deface mask and reorientation as `-i`, but no new face. Use with `-i`, not `--batch`. |
+| `-n`, `--threads N` | How many CPU threads ANTs may use. The default is `ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS` if you have set it, otherwise every core. |
+| `--reorient` / `--no-reorient` | Write the defaced scan and its deface mask in template orientation (the default). With `--no-reorient` you still get the transform files, but no reoriented images. |
+| `--crop` / `--no-crop` | Trim the reoriented images to template slices 70 to 263 along z (the default). Whole slices are dropped, and nothing is resampled. |
 | `--reface` | Also write a refaced image, with the template's face filling the removed region. |
 | `--syn` | Not required, and included for completeness. Adds a slower registration and uses its result for the deface mask. The default registration already gives almost the same mask. |
 | `--version` | Print the version and exit. |
 | `-h`, `--help` | Show the options and a short usage guide. |
 
 Reorientation changes only the image header. No voxel values are resampled or interpolated.
+
+Both `--batch` and `--extra-images` take file names separated by commas, spaces, or both, so a wildcard such as `sub-*_T1w.nii.gz` works.
+
+### `--extra-images` or `--batch`?
+
+They look alike, but they do different jobs, and you can't use them together.
+
+| | `-i` with `--extra-images` | `--batch` |
+| --- | --- | --- |
+| For | Other images from the same session as `-i`: MP2RAGE INV1, INV2, and UNI, or GRE echoes (4D is fine) | Separate scans, such as one T1w for each subject |
+| Registered | Once, on the `-i` scan | Once for every scan |
+| Deface mask | The same mask for every image | Each scan gets its own |
+| With `--reface` | Only the `-i` scan is refaced | Every scan is refaced |
+| If one fails | The whole run stops | The other scans still run |
+| Example | `faceoff -i sub-01_UNIT1.nii.gz --extra-images sub-01_inv-*_MP2RAGE.nii.gz` | `faceoff --batch sub-*_T1w.nii.gz` |
+
+To deface many MP2RAGE or multi-echo GRE sessions, run FaceOff once per session, because `--batch` can't take extra images. A shell loop does it:
+
+```bash
+for uni in sub-*_UNIT1.nii.gz; do
+  faceoff -i "$uni" --extra-images "${uni%_UNIT1.nii.gz}"_inv-*_MP2RAGE.nii.gz
+done
+```
 
 ## Choosing a workflow
 
@@ -122,7 +147,7 @@ For an input called `scan.nii.gz`, FaceOff writes these files next to it.
 | `scan_tal_defaced.nii.gz` | The same, in template orientation (unless you pass `--no-reorient`). |
 | `scan_tal_defaceMask.nii.gz` | The deface mask in template orientation (unless you pass `--no-reorient`). |
 | `scan_refaced.nii.gz` | Your scan with the template face inserted (only with `--reface`). |
-| `scan_tal_refaced.nii.gz` | The refaced scan in template orientation (only with `--reface`). |
+| `scan_tal_refaced.nii.gz` | The refaced scan in template orientation (only with `--reface`, and not with `--no-reorient`). |
 | `scan_txn-to-tal_itk.tfm` | The rotation to template orientation, as an ITK transform. |
 | `scan_txn-to-tal_fsl.mat` | The same rotation, as an FSL matrix. |
 | `extra_defaced.nii.gz`, `extra_tal_defaced.nii.gz` | For each image given with `--extra-images`, written next to that image. |
@@ -147,11 +172,21 @@ python -m pytest tests
 ruff check --select F,E9 .
 ```
 
+The editable install downloads the template files from Zenodo once, into `faceoff/data/` (git ignores that folder).
+
 ```
-faceoff/                command line, ANTs runner, registration, reorientation, face editing, template download
-tests/                  unit tests
+faceoff/cli.py          the faceoff command and its help screen
+faceoff/deface.py       defaces one scan from start to finish
+faceoff/registration.py the ANTs registration, and moving template images onto the scan
+faceoff/masking.py      removing the face and inserting the template face
+faceoff/reorient.py     template orientation (header only) and the ITK/FSL transforms
+faceoff/messages.py     what is printed in the terminal
+faceoff/ants.py         running ANTs in Docker
+faceoff/scratch.py      the temporary folder for each run
+faceoff/template.py     the template: its files, brain centre and crop range; template_files.py downloads it
+bundle_template.py      puts the template files into the pip package when it is built
+tests/                  automated tests
 registration_review/    the exact ANTs commands each mode runs
-hatch_build.py          puts the template files into the wheel when it is built
 ```
 
 ## Licence

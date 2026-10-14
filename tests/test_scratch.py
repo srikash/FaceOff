@@ -2,7 +2,7 @@ import re
 
 import pytest
 
-from faceoff.workspace import workspace
+from faceoff.scratch import workspace
 
 
 def test_workspace_name_and_cleanup(tmp_path):

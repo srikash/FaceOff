@@ -4,17 +4,23 @@ import pytest
 
 from faceoff.ants import RecordingAnts
 from faceoff.registration import Stage, register
-from faceoff.workspace import Workspace
+from faceoff.scratch import Workspace
+from faceoff.template import Template
 
 WS = Path("/WS")
 SUBJECT = Path("/data/sub.nii.gz")
+TEMPLATE = Template(Path("/template"))
+
+
+def _register(ants, syn: bool, reface: bool):
+    return register(ants, Workspace(WS), SUBJECT, TEMPLATE, syn=syn, reface=reface)
 
 
 def _chain(syn: bool, reface: bool, stage: Stage) -> list[str]:
     """The transform arguments of the antsApplyTransforms call `to_subject` makes."""
     ants = RecordingAnts()
-    tx = register(ants, Workspace(WS), SUBJECT, syn=syn, reface=reface)
-    tx.to_subject(Path("/template/mask.nii.gz"), WS / "out.nii.gz", stage)
+    tx = _register(ants, syn, reface)
+    tx.to_subject(TEMPLATE.face_mask, WS / "out.nii.gz", stage)
     tool, args = ants.calls[-1]
     assert tool == "antsApplyTransforms"
     assert args[args.index("--reference-image") + 1] == str(SUBJECT)
@@ -54,7 +60,7 @@ def test_reface_without_reface_registration_is_an_error():
 )
 def test_register_runs_requested_stages(syn, reface, n_registrations):
     ants = RecordingAnts()
-    register(ants, Workspace(WS), SUBJECT, syn=syn, reface=reface)
+    _register(ants, syn, reface)
     tools = [tool for tool, _ in ants.calls]
     assert tools[0] == "antsAI"
     assert tools.count("antsRegistration") == n_registrations
@@ -62,7 +68,14 @@ def test_register_runs_requested_stages(syn, reface, n_registrations):
 
 def test_reface_syn_starts_from_syn_composite():
     ants = RecordingAnts()
-    register(ants, Workspace(WS), SUBJECT, syn=True, reface=True)
+    _register(ants, True, True)
     reface_args = ants.calls[-1][1]
     start = reface_args[reface_args.index("--initial-moving-transform") + 1]
     assert start == "/WS/syn_Composite.h5"
+
+
+def test_registration_uses_the_given_template():
+    ants = RecordingAnts()
+    _register(ants, False, False)
+    args = " ".join(ants.calls[1][1])
+    assert f"MI[{TEMPLATE.t1w}," in args and f"[{TEMPLATE.brain_mask},1]" in args

@@ -1,8 +1,9 @@
-"""Hatch build hook: bundle the Zenodo template files into the wheel.
+"""Build step: put the four template files into the pip package.
 
-Downloads the four files (about 7.7 MB, checksum-verified) into faceoff/data when a wheel is
-built. Running from a source checkout instead downloads them on first use. The MNI copyright
-notice ships as faceoff/COPYING-MNI.
+When the package is built, this downloads the files (about 7.7 MB) from Zenodo into
+faceoff/data and checks their checksums, so `pip install faceoff` needs no further download.
+Running from a source checkout without building downloads them on first use instead. The
+MNI copyright notice ships as faceoff/COPYING-MNI.
 """
 
 from __future__ import annotations
@@ -14,9 +15,12 @@ from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 
 
 class TemplateBuildHook(BuildHookInterface):
+    """Hatch (the packaging tool) runs this while it builds the pip package."""
+
     PLUGIN_NAME = "custom"
 
     def initialize(self, version: str, build_data: dict) -> None:
+        """Download the template files into faceoff/data before the package is built."""
         if self.target_name != "wheel":
             return
         root = Path(self.root)

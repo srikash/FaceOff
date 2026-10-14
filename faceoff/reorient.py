@@ -1,11 +1,14 @@
-"""Reorientation to template ("tal") space, header only, with transforms saved as ITK and FSL.
+"""Put scans in template ("tal") orientation by changing only their headers, and save the
+rotation as ITK and FSL transform files.
 
-ITK/ANTs transforms act on LPS physical coordinates and map template points to subject
-points; NIfTI affines map voxels to RAS.
+Background: ANTs and ITK transforms work in LPS world coordinates and map template points to
+scan points; NIfTI headers map voxels to RAS world coordinates. The helpers below convert
+between the two.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,15 +16,16 @@ import nibabel as nib
 import numpy as np
 
 from .ants import AntsRunner
-from .template import TEMPLATE_CROP_Z, TEMPLATE_REF, brain_centre_lps, ref_origin_z
-from .workspace import Workspace
+from .scratch import Workspace
+from .template import Template
 
 _LPS_FLIP = np.diag([-1.0, -1.0, 1.0, 1.0])
 
 
 @dataclass(frozen=True)
 class Crop:
-    """Slices kept along one voxel axis."""
+    """Which of the scan's own slices were kept: `first` up to (not including) `last`, along
+    voxel `axis`, out of `size` slices."""
 
     axis: int
     first: int
@@ -30,36 +34,47 @@ class Crop:
 
 
 class TalReorientation:
-    """The rotation component of the registration affine (LPS, template -> subject)."""
+    """The rotation between a scan and the template, taken from the registration's affine.
 
-    def __init__(self, rigid_lps: np.ndarray) -> None:
+    Scaling and shearing are left out, so applying it never changes the brain's shape.
+    """
+
+    def __init__(self, rigid_lps: np.ndarray, template: Template) -> None:
         self.rigid_lps = rigid_lps
+        self.template = template
 
     @classmethod
     def from_affine_matrix(
-        cls, affine_lps: np.ndarray, centre_lps: np.ndarray | None = None
+        cls, affine_lps: np.ndarray, template: Template, centre_lps: np.ndarray | None = None
     ) -> TalReorientation:
-        """Polar decomposition of a 4x4 affine, fixing `centre_lps` (default: template brain
-        centroid) as the full affine does."""
-        centre = brain_centre_lps() if centre_lps is None else centre_lps
-        u, _, vt = np.linalg.svd(affine_lps[:3, :3])
-        rotation = u @ vt
+        """Take the rotation part of a 4x4 affine (LPS, template to scan).
+
+        The rotation turns about `centre_lps`, by default the centre of the template brain,
+        so the brain ends up in the same place as with the full affine.
+        """
+        centre = template.brain_centre_lps if centre_lps is None else centre_lps
+        left, _, right = np.linalg.svd(affine_lps[:3, :3])
+        rotation = left @ right
         rigid = np.eye(4)
         rigid[:3, :3] = rotation
         rigid[:3, 3] = affine_lps[:3, :3] @ centre + affine_lps[:3, 3] - rotation @ centre
-        return cls(rigid)
+        return cls(rigid, template)
 
     @classmethod
     def from_ants_affine(
-        cls, ants: AntsRunner, ws: Workspace, affine_mat: Path
+        cls, ants: AntsRunner, ws: Workspace, affine_mat: Path, template: Template
     ) -> TalReorientation:
-        """From the registration's ITK affine file (read with ConvertTransformFile)."""
+        """Read the registration's affine file (via ANTs ConvertTransformFile) and take its
+        rotation part."""
         matrix_file = ws.path("affine_matrix.txt")
         ants.run("ConvertTransformFile", ["3", affine_mat, matrix_file, "--hm"])
-        return cls.from_affine_matrix(np.loadtxt(matrix_file))
+        return cls.from_affine_matrix(np.loadtxt(matrix_file), template)
 
     def write_transforms(self, source: Path, itk_out: Path, fsl_out: Path) -> None:
-        """Save as ITK text transform and FLIRT matrix; both map `source` to the template grid."""
+        """Save the rotation as an ITK transform (.tfm) and an FSL FLIRT matrix (.mat).
+
+        Both take `source` to the template grid.
+        """
         params = " ".join(
             f"{v:.12g}" for v in [*self.rigid_lps[:3, :3].ravel(), *self.rigid_lps[:3, 3]]
         )
@@ -68,39 +83,49 @@ class TalReorientation:
             "Transform: AffineTransform_double_3_3\n"
             f"Parameters: {params}\nFixedParameters: 0 0 0\n"
         )
-        flirt = _itk_to_flirt(self.rigid_lps, nib.load(source), nib.load(TEMPLATE_REF))
+        flirt = _itk_to_flirt(self.rigid_lps, nib.load(source), nib.load(self.template.t1w))
         fsl_out.write_text("".join(" ".join(f"{v:.10f}" for v in row) + "\n" for row in flirt))
 
-    def write_image(self, source: Path, output: Path, crop: bool) -> Crop | None:
-        """Write `source` in template orientation without resampling.
+    def write_images(
+        self, sources_and_targets: Sequence[tuple[Path, Path]], crop: bool
+    ) -> list[Crop | None]:
+        """Write each source image in template orientation to its target, without resampling.
 
-        Only the header changes: voxel data and data type are kept and the rotation is absorbed
-        into the affine. With `crop`, whole slices are dropped along the voxel axis closest to
-        the template's superior direction, keeping the planes whose centres lie in the world-z
-        range of template slices TEMPLATE_CROP_Z. Returns what was cropped, if anything.
+        Only the header changes: the voxel values and data type stay exactly as they were,
+        and the rotation goes into the affine. With `crop`, whole slices are dropped along
+        the voxel axis that points closest to the template's head-foot direction; the slices
+        kept are those whose centres fall inside template slices TEMPLATE_CROP_Z. Images on
+        the same voxel grid get the same crop. Returns, for each image, what was cropped (or
+        None).
         """
-        img = nib.load(source)
-        affine = _LPS_FLIP @ np.linalg.inv(self.rigid_lps) @ _LPS_FLIP @ img.affine
-        data = np.asanyarray(img.dataobj)
+        crops: dict[tuple, Crop] = {}
+        results: list[Crop | None] = []
+        for source, target in sources_and_targets:
+            image = nib.load(source)
+            affine = _LPS_FLIP @ np.linalg.inv(self.rigid_lps) @ _LPS_FLIP @ image.affine
+            data = np.asanyarray(image.dataobj)
+            cropped = None
+            if crop:
+                grid = (image.shape[:3], affine.round(6).tobytes())
+                if grid not in crops:
+                    crops[grid] = _crop_slices(image.shape[:3], affine, self.template.crop_z_mm)
+                cropped = crops[grid]
+                data = np.take(data, np.arange(cropped.first, cropped.last), axis=cropped.axis)
+                affine[:3, 3] += affine[:3, cropped.axis] * cropped.first
+            tal = nib.Nifti1Image(data, affine, image.header)
+            tal.set_sform(affine, code=4)  # 4 = MNI152 space
+            tal.set_qform(affine, code=4)
+            nib.save(tal, target)
+            results.append(cropped)
+        return results
 
-        cropped = None
-        if crop:
-            cropped = _crop_slices(img.shape, affine)
-            data = np.take(data, np.arange(cropped.first, cropped.last), axis=cropped.axis)
-            affine[:3, 3] += affine[:3, cropped.axis] * cropped.first
 
-        tal = nib.Nifti1Image(data, affine, img.header)
-        tal.set_sform(affine, code=4)  # 4 = MNI152 space
-        tal.set_qform(affine, code=4)
-        nib.save(tal, output)
-        return cropped
-
-
-def _crop_slices(shape: tuple[int, ...], affine: np.ndarray) -> Crop:
-    shape = shape[:3]  # a 4D image is cropped the same way in every volume
-    z0 = ref_origin_z()
-    z_min = z0 + TEMPLATE_CROP_Z[0] - 0.5
-    z_max = z0 + TEMPLATE_CROP_Z[1] - 0.5
+def _crop_slices(
+    shape: tuple[int, ...], affine: np.ndarray, z_range_mm: tuple[float, float]
+) -> Crop:
+    """Work out which slices of a scan (already in template orientation) have their centres
+    inside the world z range `z_range_mm`."""
+    z_min, z_max = z_range_mm
     axis = int(np.argmax(np.abs(affine[2, :3])))
     centres = np.tile((np.array(shape) - 1) / 2, (shape[axis], 1))
     centres[:, axis] = np.arange(shape[axis])
@@ -112,7 +137,8 @@ def _crop_slices(shape: tuple[int, ...], affine: np.ndarray) -> Crop:
 
 
 def _fsl_voxel_matrix(img: nib.Nifti1Image) -> np.ndarray:
-    """Voxel -> FSL scaled-mm matrix (x is flipped for radiological-positive-det images)."""
+    """Return FSL's voxel-to-mm matrix for an image (FSL flips x when the affine's
+    determinant is positive)."""
     zooms = img.header.get_zooms()[:3]
     fsl = np.diag([*zooms, 1.0])
     if np.linalg.det(img.affine[:3, :3]) > 0:
@@ -122,7 +148,7 @@ def _fsl_voxel_matrix(img: nib.Nifti1Image) -> np.ndarray:
 
 
 def _itk_to_flirt(itk_lps: np.ndarray, src: nib.Nifti1Image, ref: nib.Nifti1Image) -> np.ndarray:
-    """FLIRT matrix (src FSL-mm -> ref FSL-mm) for an ITK transform mapping ref -> src."""
+    """Convert an ITK transform (template to scan) into a FLIRT matrix (scan to template)."""
     ref_vox_to_src_vox = np.linalg.inv(src.affine) @ (_LPS_FLIP @ itk_lps @ _LPS_FLIP) @ ref.affine
     return (
         _fsl_voxel_matrix(ref)

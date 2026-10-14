@@ -1,4 +1,8 @@
-"""The template files and how to fetch them. Standard library only, so the build hook can use it."""
+"""The four template files, their published checksums, and how to download them from Zenodo.
+
+This file uses only Python's standard library, so `bundle_template.py` can run it while the
+pip package is being built.
+"""
 
 from __future__ import annotations
 
@@ -21,7 +25,7 @@ TEMPLATE_FILES = {
 
 
 def md5(path: Path) -> str:
-    """Hex md5 of a file, read in 1 MB chunks."""
+    """Return the md5 checksum of a file."""
     digest = hashlib.md5()
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1 << 20), b""):
@@ -30,15 +34,17 @@ def md5(path: Path) -> str:
 
 
 def is_complete(directory: Path) -> bool:
-    """True when every template file is present and matches its published checksum."""
+    """Return True when every template file is in `directory` and matches its checksum."""
     return all(_valid(directory / name, checksum) for name, checksum in TEMPLATE_FILES.items())
 
 
 def _valid(path: Path, checksum: str) -> bool:
+    """Return True when `path` exists and has the expected checksum."""
     return path.is_file() and md5(path) == checksum
 
 
 def _download(url: str, dest: Path) -> None:
+    """Download `url` to `dest`."""
     with urllib.request.urlopen(url, timeout=60) as response, dest.open("wb") as out:
         shutil.copyfileobj(response, out)
 
@@ -48,9 +54,9 @@ def fetch_missing(
     download: Callable[[str, Path], None] = _download,
     log: Callable[[str], None] = lambda message: None,
 ) -> None:
-    """Download any missing or corrupt template file from Zenodo into `directory`.
+    """Download any template file that is missing from `directory` or damaged.
 
-    Raises RuntimeError on a network failure or checksum mismatch.
+    Raises RuntimeError if a download fails or a file does not match its checksum.
     """
     directory.mkdir(parents=True, exist_ok=True)
     for name, checksum in TEMPLATE_FILES.items():

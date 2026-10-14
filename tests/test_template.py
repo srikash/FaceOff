@@ -60,17 +60,20 @@ def test_network_failure_is_a_runtime_error(tmp_path, fake_files):
 
 
 def test_bundled_files_are_used_only_when_complete(tmp_path, monkeypatch, fake_files):
-    monkeypatch.delenv("FACEOFF_TEMPLATE_DIR", raising=False)
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     monkeypatch.setattr(template, "_BUNDLED_DIR", tmp_path / "data")
-    assert template._template_dir() == tmp_path / "cache" / "faceoff" / "zenodo-23328835"
+    cache = str(tmp_path / "cache")
+    template._default_template.cache_clear()
+    found = template._default_template(None, cache)
+    assert found.folder == tmp_path / "cache" / "faceoff" / "zenodo-23328835"
 
     (tmp_path / "data").mkdir()
     for name, data in fake_files.items():
         (tmp_path / "data" / name).write_bytes(data)
-    assert template._template_dir() == tmp_path / "data"
+    template._default_template.cache_clear()
+    assert template._default_template(None, cache).folder == tmp_path / "data"
+    template._default_template.cache_clear()
 
 
 def test_environment_variable_wins(tmp_path, monkeypatch):
     monkeypatch.setenv("FACEOFF_TEMPLATE_DIR", str(tmp_path / "mine"))
-    assert template._template_dir() == tmp_path / "mine"
+    assert template.Template.default().folder == tmp_path / "mine"

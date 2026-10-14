@@ -1,37 +1,54 @@
-"""The `faceoff` command: reads the flags, runs the pipeline for each scan, and reports the result."""
+"""The `faceoff` command: reads the options, defaces each scan, and reports what happened."""
 
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
 from pathlib import Path
-from threading import Thread
-from time import monotonic
-from typing import Any, TypeVar
+from typing import Any
 
 import rich_click as click
 import rich_click.rich_click as rich_click_config
+from rich import box
 from rich.console import Group
-from rich.live import Live
 from rich.padding import Padding
 from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+from rich.table import Table
 from rich.text import Text
 from rich_click.rich_command import RichCommand
 
-from . import pipeline
+from . import deface
 from .ants import AntsError, ensure_docker_image
-from .console import console, error, format_elapsed, log, quote
-from .reporting import ConsoleReporter, package_version, print_banner
+from .messages import (
+    ConsoleReporter,
+    console,
+    error,
+    log,
+    package_version,
+    print_banner,
+    quote,
+)
 from .template import TEMPLATE_CROP_Z, ensure_template
 
-_T = TypeVar("_T")
+# The two ways of giving input get their own colour, here and in the usage guide.
+_ONE_SCAN = "cyan"
+_BATCH = "magenta"
 
 rich_click_config.OPTION_GROUPS = {
     "*": [
         {
-            "name": "Input (-i or --batch required)",
-            "options": ["--input", "--batch", "--extra-images"],
-            "title_style": "bold red",
+            "name": "Input A: one scan (-i)",
+            "help": "One registration, shared by -i and its extra images. Use A or B, not both.",
+            "options": ["--input", "--extra-images"],
+            "title_style": f"bold {_ONE_SCAN}",
+            "panel_styles": {"border_style": _ONE_SCAN},
+        },
+        {
+            "name": "Input B: several scans (--batch)",
+            "help": "A separate registration for every scan. Use A or B, not both.",
+            "options": ["--batch"],
+            "title_style": f"bold {_BATCH}",
+            "panel_styles": {"border_style": _BATCH},
         },
         {"name": "Outputs", "options": ["--reorient", "--crop", "--reface"], "title_style": "bold"},
         {
@@ -50,12 +67,14 @@ CITATION_NOTICE = (
     "the MNI ICBM152 template, and ANTs."
 )
 _EXAMPLE = "[bold white]faceoff[/] [bold cyan]-i[/] [green]sub-01_T1w.nii.gz[/]"
+_MP2RAGE_EXAMPLE = "[bold white]faceoff[/] [bold cyan]-i[/] [green]sub-01_UNIT1.nii.gz[/]"
 
 
 class FaceOffCommand(RichCommand):
-    """Render the usage guide in the same Rich style as the options."""
+    """The `faceoff` command, with a usage guide drawn in the same style as the options."""
 
     def format_epilog(self, context: Any, formatter: Any) -> None:
+        """Draw the usage guide (example commands in yellow boxes) below the options."""
         def panel(title: str, body: str) -> Padding:
             return Padding(
                 Panel(
@@ -73,8 +92,9 @@ class FaceOffCommand(RichCommand):
             panel(
                 "Deface",
                 f"{_EXAMPLE}\n"
-                "Writes [green]_defaced[/], [green]_defaceMask[/], [green]_tal_defaced[/] and the "
-                "[green]_txn-to-tal[/] transforms next to the input.\n\n"
+                "Writes [green]_defaced[/], [green]_defaceMask[/], [green]_tal_defaced[/], "
+                "[green]_tal_defaceMask[/], and the [green]_txn-to-tal[/] transforms next to "
+                "the input.\n\n"
                 f"{_EXAMPLE} [bold cyan]--no-reorient[/]\n"
                 "Keeps the original orientation; the transforms are still saved.",
             ),
@@ -84,26 +104,73 @@ class FaceOffCommand(RichCommand):
                 "Also writes [green]_refaced[/] and [green]_tal_refaced[/], with the template's "
                 "face in place of the removed one.",
             ),
+            _extra_images_or_batch(),
             panel(
-                "MP2RAGE or multi-echo GRE",
-                f"{_EXAMPLE} [bold cyan]--extra-images[/] "
-                "[green]sub-01_inv-1_MP2RAGE.nii.gz,sub-01_inv-2_MP2RAGE.nii.gz[/]\n"
-                "Defaces and reorients the other images with the same mask, using the "
-                "registration of the [bold cyan]-i[/] scan.",
-            ),
-            panel(
-                "Batch",
-                "[bold white]faceoff[/] [bold cyan]--batch[/] "
-                "[green]sub-01_T1w.nii.gz,sub-02_T1w.nii.gz[/]\n"
-                "Processes the scans one after another.",
+                "Many MP2RAGE or GRE sessions",
+                "--batch cannot take extra images, so run FaceOff once per session, for "
+                "example in a loop:\n"
+                "[bold white]for[/] uni [bold white]in[/] [green]sub-*_UNIT1.nii.gz[/]; "
+                "[bold white]do[/]\n"
+                "  [bold white]faceoff[/] [bold cyan]-i[/] [green]\"$uni\"[/] "
+                "[bold cyan]--extra-images[/] "
+                "[green]\"${uni%_UNIT1.nii.gz}\"_inv-*_MP2RAGE.nii.gz[/]\n"
+                "[bold white]done[/]",
             ),
             Text.from_markup(f"\n[dim]{CITATION_NOTICE}[/]"),
         )
         formatter.write(Padding(content, formatter.config.padding_epilog))
 
 
+def _extra_images_or_batch() -> Padding:
+    """Draw --extra-images and --batch side by side, so the difference is plain."""
+    table = Table(
+        title=Text.from_markup("[bold yellow]--extra-images or --batch?[/]"),
+        title_justify="left",
+        box=box.ROUNDED,
+        border_style="yellow",
+        show_lines=True,
+        expand=True,
+    )
+    table.add_column("", style="bold", no_wrap=True)
+    table.add_column(f"[bold {_ONE_SCAN}]A: -i with --extra-images[/]", ratio=1)
+    table.add_column(f"[bold {_BATCH}]B: --batch[/]", ratio=1)
+    for row in (
+        ("For", "Other images from the same session as -i: MP2RAGE INV1, INV2, and UNI, or "
+         "GRE echoes (4D is fine)", "Separate scans, such as one T1w for each subject"),
+        ("Registered", "Once, on the -i scan", "Once for every scan"),
+        ("Deface mask", "The same mask for every image", "Each scan gets its own"),
+        ("With --reface", "Only the -i scan is refaced", "Every scan is refaced"),
+        ("If one fails", "The whole run stops", "The other scans still run"),
+        ("Example",
+         "[bold white]faceoff[/] [bold cyan]-i[/] [green]sub-01_UNIT1.nii.gz[/] "
+         "[bold cyan]--extra-images[/] [green]sub-01_inv-*_MP2RAGE.nii.gz[/]",
+         "[bold white]faceoff[/] [bold cyan]--batch[/] [green]sub-*_T1w.nii.gz[/]"),
+    ):
+        table.add_row(*(Text.from_markup(cell) for cell in row))
+    return Padding(
+        Group(table, Text.from_markup(
+            "[dim]Both take file names separated by commas, spaces, or both. They cannot be "
+            "used together.[/]"
+        )),
+        (1, 0, 0, 0),
+    )
+
+
+def _at_least_one(context: Any, parameter: Any, value: int | None) -> int | None:
+    """Refuse a thread count below 1."""
+    if value is not None and value < 1:
+        raise click.BadParameter("must be 1 or more.")
+    return value
+
+
+def _split_names(items: list[str]) -> tuple[Path, ...]:
+    """Turn file names given with commas, spaces, or both into a list of paths."""
+    return tuple(Path(name.strip()) for item in items for name in item.split(",") if name.strip())
+
+
 def _resolve_threads(threads: int | None) -> int:
-    """--threads, then ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS, then every core."""
+    """Return how many threads ANTs may use: --threads if given, otherwise
+    ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS if set, otherwise every core."""
     if threads is not None:
         return threads
     if env_threads := os.environ.get("ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS"):
@@ -111,36 +178,18 @@ def _resolve_threads(threads: int | None) -> int:
     return os.cpu_count() or 1
 
 
-def _with_elapsed_ticker(work: Callable[[], _T]) -> _T:
-    """Run `work()` while a "Time elapsed" line updates below the log (terminals only)."""
-    if not console.is_terminal:
-        return work()
-    result: list[_T] = []
-    failure: list[BaseException] = []
-
-    def target() -> None:
-        try:
-            result.append(work())
-        except BaseException as exc:  # re-raised on the calling thread below
-            failure.append(exc)
-
-    started = monotonic()
-    thread = Thread(target=target, daemon=True)
-    thread.start()
-    with Live(console=console, refresh_per_second=4, transient=True) as live:
-        try:
-            while thread.is_alive():
-                elapsed = format_elapsed(monotonic() - started)
-                live.update(Text(f"Time elapsed: {elapsed}", style="dim"))
-                thread.join(timeout=0.2)
-        except KeyboardInterrupt:
-            # Ctrl-C also stops the running ANTs container; let the worker clean up its
-            # scratch folder before exiting.
-            thread.join()
-            raise
-    if failure:
-        raise failure[0]
-    return result[0]
+def _deface_with_timer(path: Path, options: deface.Options) -> None:
+    """Deface one scan while a "time elapsed" line ticks below the log (in a terminal only)."""
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[dim]Time elapsed:[/]"),
+        TimeElapsedColumn(),
+        console=console,
+        transient=True,
+        disable=not console.is_terminal,
+    ) as progress:
+        progress.add_task("", total=None)
+        deface.run(path, options, ConsoleReporter())
 
 
 @click.command(
@@ -152,28 +201,33 @@ def _with_elapsed_ticker(work: Callable[[], _T]) -> _T:
     ),
     epilog=CITATION_NOTICE,
     no_args_is_help=True,
-    context_settings={"help_option_names": ["-h", "--help"]},
+    # allow_extra_args collects the scans after the first one in `--batch a.nii.gz b.nii.gz`
+    context_settings={"help_option_names": ["-h", "--help"], "allow_extra_args": True},
 )
 @click.option(
     "-i", "--input", "input_file",
     type=click.Path(path_type=Path, exists=True, dir_okay=False),
     help="The scan to deface (.nii or .nii.gz).",
 )
-@click.option("--batch", help="Several scans separated by commas, processed one after another.")
+@click.option(
+    "--batch", metavar="FILES",
+    help="Several separate scans (commas or spaces between names), each registered and "
+    "defaced on its own. If ANTs fails on one, or a file is missing, the others still run.",
+)
 @click.option(
     "--extra-images", multiple=True, metavar="FILES",
-    help="Other images in the same scanner space as -i (for example MP2RAGE INV1, INV2 and "
-    "UNI, or GRE echoes; 4D is fine), separated by commas. They get the same deface mask and "
-    "reorientation, but are not refaced. Not with --batch.",
+    help="Other images from the same session as -i (commas or spaces between names), for "
+    "example MP2RAGE INV1, INV2, and UNI, or GRE echoes (4D is fine). They reuse the -i scan's "
+    "registration, so they get its deface mask and reorientation; they are not refaced.",
 )
 @click.option(
     "--reorient/--no-reorient", default=True, show_default=True,
-    help="Also write the defaced scan in template orientation (header only, no resampling). "
-    "The ITK and FSL transforms are saved either way.",
+    help="Also write the defaced scan and its deface mask in template orientation (only the "
+    "header changes, nothing is resampled). The ITK and FSL transforms are saved either way.",
 )
 @click.option(
     "--crop/--no-crop", default=True, show_default=True,
-    help=f"Trim the reoriented scan to template slices {TEMPLATE_CROP_Z[0]} to "
+    help=f"Trim the reoriented outputs to template slices {TEMPLATE_CROP_Z[0]} to "
     f"{TEMPLATE_CROP_Z[1] - 1} along z. Whole slices are dropped; nothing is resampled.",
 )
 @click.option(
@@ -181,8 +235,9 @@ def _with_elapsed_ticker(work: Callable[[], _T]) -> _T:
     help="Also write a refaced scan, with the template's face in place of the removed one.",
 )
 @click.option(
-    "-n", "--threads", type=click.IntRange(min=1), default=None, metavar="N",
-    help="Threads for ANTs. Default: ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS, else every core.",
+    "-n", "--threads", type=int, default=None, metavar="N", callback=_at_least_one,
+    help="How many CPU threads ANTs may use. Default: ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS if "
+    "set, otherwise every core.",
 )
 @click.option(
     "--syn", is_flag=True,
@@ -191,7 +246,9 @@ def _with_elapsed_ticker(work: Callable[[], _T]) -> _T:
 )
 @click.option("-d", "depad", is_flag=True, hidden=True, help="Deprecated; ignored.")
 @click.version_option(package_version(), "--version", prog_name="faceoff")
+@click.pass_context
 def cli(
+    context: click.Context,
     input_file: Path | None,
     batch: str | None,
     extra_images: tuple[str, ...],
@@ -205,15 +262,22 @@ def cli(
     """Deface one scan, or several with --batch."""
     if (input_file is None) == (batch is None):
         raise click.UsageError("Give exactly one of -i/--input or --batch.")
-    extras = tuple(Path(p.strip()) for item in extra_images for p in item.split(",") if p.strip())
-    if extras and batch:
+    if extra_images and batch:
         raise click.UsageError("--extra-images belongs to one scan; use it with -i, not --batch.")
-    for extra in extras:
-        if not extra.is_file():
-            raise click.BadParameter(f"File '{extra}' does not exist.", param_hint="--extra-images")
-    files = (
-        [Path(p.strip()) for p in batch.split(",") if p.strip()] if batch else [input_file]
-    )
+    # Names after --batch or --extra-images may be separated by spaces as well as commas; the
+    # shell hands the space-separated ones over as extra arguments.
+    if context.args and not (batch or extra_images):
+        raise click.UsageError(
+            f"Unexpected extra argument: {context.args[0]}. To deface several scans, use "
+            "--batch; for other images of the same scan, use --extra-images."
+        )
+    extras = _split_names([*extra_images, *context.args]) if extra_images else ()
+    files = _split_names([batch, *context.args]) if batch else (input_file,)
+    if extras:  # catch a mistyped extra image before Docker or the template are fetched
+        try:
+            deface.check_inputs(input_file, deface.Options(threads=1, extra_images=extras))
+        except (FileNotFoundError, ValueError) as problem:
+            raise click.BadParameter(str(problem), param_hint="--extra-images") from problem
 
     print_banner()
     if depad:
@@ -225,7 +289,7 @@ def cli(
         error(str(failure))
         raise SystemExit(1) from failure
 
-    options = pipeline.Options(
+    options = deface.Options(
         threads=_resolve_threads(threads), syn=syn, reorient=reorient, crop=crop, reface=reface,
         extra_images=extras,
     )
@@ -236,7 +300,7 @@ def cli(
     failed = []
     for path in files:
         try:
-            _with_elapsed_ticker(lambda: pipeline.run(path, options, ConsoleReporter()))
+            _deface_with_timer(path, options)
         except AntsError as failure:
             error(f"{path}: {failure}")
             failed.append(path)
@@ -250,5 +314,5 @@ def cli(
 
 
 def main() -> None:
-    """Run the command line (`python -m faceoff`)."""
+    """Start the command line (used by `python -m faceoff`)."""
     cli()
