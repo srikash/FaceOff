@@ -8,7 +8,11 @@ Other features include rotation to template orientation and automatic cropping, 
 - `--batch` defaces many scans in one go.
 - `--engine apptainer` or `--sif` runs ANTs in Apptainer or Singularity, for clusters without Docker.
 
-![](https://gitlab.com/skash/images-and-gifs/-/raw/master/face-off/faceoff.gif)
+<p align="center">
+  <img src="https://gitlab.com/skash/images-and-gifs/-/raw/master/face-off/faceoff.gif" alt="Face swap scene from the film Face/Off">
+  <br>
+  <em>Face/Off (1997)</em>
+</p>
 
 ## Install
 
