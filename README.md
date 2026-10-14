@@ -1,9 +1,8 @@
 # FaceOff [![Version](https://img.shields.io/badge/version-2.0.0-purple.svg)](https://github.com/srikash/FaceOff/releases/tag/v2.0.0) [![Licence](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE) [![DOI](https://zenodo.org/badge/307797054.svg)](https://zenodo.org/badge/latestdoi/307797054)
 
-Deface anatomical MRI scans with ANTs, run in Docker so you don't have to install it. FaceOff registers each scan to an MNI152 template, then removes the face and ears and leaves the brain untouched.
+Deface anatomical MRI scans with ANTs, run in Docker so you don't have to install it. It removes the face and, if you ask, inserts a template face in its place.
 
 - It saves the rotation to template orientation as ITK and FSL transforms, and writes reoriented copies trimmed to the head. Only the header changes; nothing is resampled.
-- `--reface` puts the template's face in place of the removed one.
 - `--extra-images` gives other images from the same session (MP2RAGE, multi-echo GRE) the same mask.
 - `--batch` defaces many scans in one go.
 
