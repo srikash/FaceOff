@@ -5,7 +5,7 @@ import numpy as np
 
 from conftest import write_template
 from faceoff.reorient import TalReorientation, _itk_to_flirt
-from faceoff.template import TEMPLATE_CROP_Z, Template
+from faceoff.template import TEMPLATE_CROP_Z_MM, Template
 
 NOWHERE = Template(Path("/nowhere"))  # for tests that never read template files
 
@@ -75,20 +75,20 @@ def test_header_only_reorientation_keeps_data_and_codes(tmp_path):
     assert out.header["sform_code"] == 4 and out.header["qform_code"] == 4
 
 
-def test_crop_range_follows_the_template_slice_thickness(tmp_path):
-    """Slice indices are converted through the template's affine, so a 2 mm template gives a
-    range twice as long (the old code assumed 1 mm slices)."""
+def test_crop_range_is_in_millimetres_whatever_the_template_grid(tmp_path):
+    """The crop is a fixed world range, so a template on another grid (here 2 mm, with a
+    different origin) gives the same range."""
     affine = np.diag([2.0, 2.0, 2.0, 1.0])
     affine[:3, 3] = [0, 0, -100]
-    template = write_template(tmp_path / "t2mm", affine)
-    low, high = template.crop_z_mm
-    assert (low, high) == (-100 + 2 * (TEMPLATE_CROP_Z[0] - 0.5), -100 + 2 * (TEMPLATE_CROP_Z[1] - 0.5))
+    assert write_template(tmp_path / "t2mm", affine).crop_z_mm == TEMPLATE_CROP_Z_MM
+    assert write_template(tmp_path / "t1mm").crop_z_mm == TEMPLATE_CROP_Z_MM == (-100.0, 125.0)
 
 
 def test_crop_on_an_oblique_scan_keeps_only_slices_inside_the_template_range(tmp_path):
-    template = write_template(tmp_path / "template")  # 1 mm, origin 0: keeps z 69.5 to 263.5
-    low, high = template.crop_z_mm
+    template = write_template(tmp_path / "template")
+    low, high = template.crop_z_mm  # -100 to 125 mm
     affine = _rotation(0, 30) @ np.diag([1.0, 1.0, 1.2, 1.0])  # tilted 30 degrees, 1.2 mm slices
+    affine[2, 3] = -150  # so that the scan reaches past both ends of the range
     shape = (10, 12, 300)
     data = np.arange(np.prod(shape), dtype=np.int32).reshape(shape)
     source, target = tmp_path / "oblique.nii.gz", tmp_path / "tal.nii.gz"
@@ -114,10 +114,11 @@ def test_crop_on_an_oblique_scan_keeps_only_slices_inside_the_template_range(tmp
 def test_images_on_the_same_grid_get_the_same_crop(tmp_path):
     template = write_template(tmp_path / "template")
     affine = np.eye(4)
+    affine[2, 3] = -150  # slices at z -150 to 249 mm; the range -100 to 125 keeps slices 50 to 274
     pairs = []
     for name in ("a", "b"):
         path = tmp_path / f"{name}.nii.gz"
         nib.save(nib.Nifti1Image(np.zeros((4, 4, 400), np.int16), affine), path)
         pairs.append((path, tmp_path / f"{name}_tal.nii.gz"))
     first, second = TalReorientation(np.eye(4), template).write_images(pairs, crop=True)
-    assert first == second and (first.first, first.last) == (120, 314)
+    assert first == second and (first.first, first.last) == (50, 275)

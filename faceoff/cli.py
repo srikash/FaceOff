@@ -28,7 +28,7 @@ from .messages import (
     print_banner,
     quote,
 )
-from .template import TEMPLATE_CROP_Z, ensure_template
+from .template import TEMPLATE_CROP_Z_MM, ensure_template
 
 # The two ways of giving input get their own colour, here and in the usage guide.
 _ONE_SCAN = "cyan"
@@ -266,8 +266,9 @@ def _deface_with_timer(path: Path, options: deface.Options) -> None:
 )
 @click.option(
     "--crop/--no-crop", default=True, show_default=True,
-    help=f"Trim the reoriented outputs to template slices {TEMPLATE_CROP_Z[0]} to "
-    f"{TEMPLATE_CROP_Z[1] - 1} along z. Whole slices are dropped; nothing is resampled.",
+    help=f"Trim the reoriented outputs to z {TEMPLATE_CROP_Z_MM[0]:g} to "
+    f"{TEMPLATE_CROP_Z_MM[1]:g} mm in template space. Whole slices are dropped; nothing is "
+    "resampled.",
 )
 @click.option(
     "--reface", is_flag=True,
@@ -298,7 +299,8 @@ def _deface_with_timer(path: Path, options: deface.Options) -> None:
 @click.option(
     "--syn", is_flag=True,
     help="Not required; included for completeness. Adds a slower registration and uses it "
-    "for the deface mask. The default registration already gives almost the same mask.",
+    "for the deface mask, and for the eye mask with --enucleate or --renucleate. The default "
+    "registration already gives almost the same masks.",
 )
 @click.option(
     "--engine", type=click.Choice(ENGINES), default=None,

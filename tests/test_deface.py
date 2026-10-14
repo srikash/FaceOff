@@ -2,6 +2,7 @@
 template."""
 
 import re
+from pathlib import Path
 
 import nibabel as nib
 import numpy as np
@@ -177,6 +178,36 @@ class RecordingReporter(deface.Reporter):
         self.crops.append(crop)
 
 
+class CallLog(FakeAnts):
+    """FakeAnts that also keeps each antsApplyTransforms call, to see which warp it used."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.applied: list[list[str]] = []
+
+    def run(self, tool, args):
+        if tool == "antsApplyTransforms":
+            self.applied.append([str(a) for a in args])
+        super().run(tool, args)
+
+
+def _transforms_for(ants, name):
+    [args] = [a for a in ants.applied if name in Path(a[a.index("--input") + 1]).name]
+    return " ".join(args)
+
+
+def test_the_eye_mask_uses_the_affine_unless_syn_is_asked_for(tmp_path, template):
+    for syn, expected in ((False, "0GenericAffine.mat"), (True, "syn_InverseComposite.h5")):
+        subject = _save(tmp_path / f"t{syn}.nii.gz", np.full((6, 5, 4), 7, np.int16))
+        options = deface.Options(
+            threads=1, crop=False, qc=False, enucleate=True, syn=syn, template=template
+        )
+        ants = CallLog()
+        deface.run(subject, options, ants=ants)
+        assert expected in _transforms_for(ants, "eye_mask")
+        assert expected in _transforms_for(ants, "face_mask")  # both masks use the same warp
+
+
 def test_reface_with_enucleate_puts_the_eyes_back_like_renucleate(tmp_path, template):
     results = []
     for name, flags in (("a", {"reface": True, "enucleate": True}),
@@ -219,14 +250,16 @@ def test_a_failing_qc_page_does_not_stop_the_defacing(tmp_path, template, monkey
 
 
 def test_crop_is_reported_once_and_applied_to_the_tal_outputs(tmp_path, template):
-    subject = _save(tmp_path / "t1w.nii.gz", np.full((6, 5, 400), 7, np.int16))
+    origin = np.eye(4)
+    origin[2, 3] = -150  # slices at z -150 to 249 mm; the crop range -100 to 125 keeps 50 to 274
+    subject = _save(tmp_path / "t1w.nii.gz", np.full((6, 5, 400), 7, np.int16), origin)
     reporter = RecordingReporter()
 
     outputs = deface.run(subject, deface.Options(threads=1, template=template), reporter, FakeAnts())
 
-    assert reporter.crops == [Crop(axis=2, first=120, last=314, size=400)]
+    assert reporter.crops == [Crop(axis=2, first=50, last=275, size=400)]
     for path in (outputs.tal_defaced, outputs.tal_deface_mask):
-        assert nib.load(path).shape == (6, 5, 194)
+        assert nib.load(path).shape == (6, 5, 225)
 
 
 def test_no_reorient_writes_transforms_but_no_tal_files(tmp_path, template):

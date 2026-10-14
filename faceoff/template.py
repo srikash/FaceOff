@@ -18,10 +18,11 @@ import numpy as np
 
 from .template_files import PREFIX, ZENODO_RECORD, fetch_missing, is_complete
 
-# Template slices (voxel indices along z, end exclusive) kept in the template-orientation
-# outputs unless --no-crop is given. The template has 50 padding slices at the bottom of z,
-# so this range starts 50 slices higher than it would on the unpadded MNI grid.
-TEMPLATE_CROP_Z = (120, 314)
+# The part of the head, as a world z range in template space (mm, bottom to top), that the
+# template-orientation outputs are cropped to unless --no-crop is given. The template brain
+# spans z -75 to 88 mm and its scalp reaches about 101 mm; this range leaves room for brains
+# and heads some 15 per cent larger, and for the cerebellum and top of the neck.
+TEMPLATE_CROP_Z_MM = (-100.0, 125.0)
 
 _BUNDLED_DIR = Path(__file__).resolve().parent / "data"
 
@@ -79,21 +80,10 @@ class Template:
         ras = mask.affine @ np.append(voxel, 1.0)
         return (ras * np.array([-1.0, -1.0, 1.0, 1.0]))[:3]
 
-    @cached_property
+    @property
     def crop_z_mm(self) -> tuple[float, float]:
-        """The world z range (mm, RAS) covered by template slices TEMPLATE_CROP_Z.
-
-        The range runs from the lower edge of the first slice kept to the lower edge of the
-        first slice dropped, so it works for any slice thickness.
-        """
-        image = nib.load(self.t1w)
-        centre = (np.array(image.shape[:3]) - 1) / 2
-        edges = []
-        for index in TEMPLATE_CROP_Z:
-            voxel = centre.copy()
-            voxel[2] = index - 0.5
-            edges.append(float(nib.affines.apply_affine(image.affine, voxel)[2]))
-        return min(edges), max(edges)
+        """The world z range (mm, RAS) the template-orientation outputs are cropped to."""
+        return TEMPLATE_CROP_Z_MM
 
 
 @cache

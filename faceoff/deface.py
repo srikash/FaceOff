@@ -25,7 +25,7 @@ class Options:
     syn: bool = False
     # Also write the outputs in template orientation (header change only).
     reorient: bool = True
-    # Trim those template-orientation outputs to template slices TEMPLATE_CROP_Z. Does nothing
+    # Trim those template-orientation outputs to the z range TEMPLATE_CROP_Z_MM. Does nothing
     # without reorient.
     crop: bool = True
     # Also write a copy with the template's face put in place of the removed one.

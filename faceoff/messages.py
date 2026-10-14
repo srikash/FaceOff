@@ -11,7 +11,7 @@ from rich.console import Console
 
 from .deface import Options, Outputs, Reporter
 from .reorient import Crop
-from .template import TEMPLATE_CROP_Z
+from .template import TEMPLATE_CROP_Z_MM
 
 console = Console()
 
@@ -84,7 +84,7 @@ class ConsoleReporter(Reporter):
         )
         console.print(
             f"[bold]Reorient:[/bold] {yes_no[options.reorient]}   "
-            f"[bold]Crop (z {TEMPLATE_CROP_Z[0]}-{TEMPLATE_CROP_Z[1] - 1}):[/bold] "
+            f"[bold]Crop (z {TEMPLATE_CROP_Z_MM[0]:g} to {TEMPLATE_CROP_Z_MM[1]:g} mm):[/bold] "
             f"{yes_no[options.crop and options.reorient]}   "
             f"[bold]Reface:[/bold] {yes_no[options.reface]}   "
             f"[bold]Enucleate:[/bold] {yes_no[options.remove_eyes]}   "

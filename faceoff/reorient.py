@@ -94,7 +94,7 @@ class TalReorientation:
         Only the header changes: the voxel values and data type stay exactly as they were,
         and the rotation goes into the affine. With `crop`, whole slices are dropped along
         the voxel axis that points closest to the template's head-foot direction; the slices
-        kept are those whose centres fall inside template slices TEMPLATE_CROP_Z. Images on
+        kept are those whose centres fall inside the z range TEMPLATE_CROP_Z_MM. Images on
         the same voxel grid get the same crop. Returns, for each image, what was cropped (or
         None).
         """
