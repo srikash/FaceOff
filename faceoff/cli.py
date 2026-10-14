@@ -115,7 +115,8 @@ class FaceOffCommand(RichCommand):
                 "Also removes the eyes from [green]_defaced[/] and [green]_defaceMask[/].\n\n"
                 f"{_EXAMPLE} [bold cyan]--renucleate[/]\n"
                 "Also writes [green]_refaced[/] and [green]_tal_refaced[/], with the template's "
-                "eyes in place of the removed ones (add [bold cyan]--reface[/] for the face too).",
+                "eyes in place of the removed ones (add [bold cyan]--reface[/] for the face too; "
+                "[bold cyan]--reface --enucleate[/] means the same).",
             ),
             panel(
                 "QC page",
@@ -275,12 +276,14 @@ def _deface_with_timer(path: Path, options: deface.Options) -> None:
 )
 @click.option(
     "--enucleate", is_flag=True,
-    help="Also remove the eyes, using the template's eye mask.",
+    help="Also remove the eyes, using the template's eye mask. With --reface, the template's "
+    "eyes are put back too, as with --renucleate.",
 )
 @click.option(
     "--renucleate", is_flag=True,
     help="Also put the template's eyes in place of the removed ones, as --reface does for the "
-    "face. Implies --enucleate and writes the refaced files.",
+    "face. Implies --enucleate and writes the refaced files. Redundant with --reface "
+    "--enucleate, which does the same.",
 )
 @click.option(
     "--qc/--no-qc", default=True, show_default=True,

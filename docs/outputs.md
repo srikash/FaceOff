@@ -8,7 +8,7 @@ For an input called `scan.nii.gz`, FaceOff writes these files next to it.
 | `scan_defaced.nii.gz` | Your scan with the face (and the eyes, with `--enucleate` or `--renucleate`) removed, in its original orientation and data type. |
 | `scan_tal_defaced.nii.gz` | The same, in template orientation (unless you pass `--no-reorient`). |
 | `scan_tal_defaceMask.nii.gz` | The deface mask in template orientation (unless you pass `--no-reorient`). |
-| `scan_refaced.nii.gz` | Your scan with the template face inserted (with `--reface`), the template eyes (with `--renucleate`), or both. |
+| `scan_refaced.nii.gz` | Your scan with the template face inserted (with `--reface`), the template eyes (with `--renucleate`, or with `--reface --enucleate`), or both. |
 | `scan_tal_refaced.nii.gz` | The refaced scan in template orientation (with `--reface` or `--renucleate`, and not with `--no-reorient`). |
 | `scan_faceoff_qc.html` | A QC page (unless you pass `--no-qc`): a 10 fps GIF through the sagittal slices of `scan_defaced`, next to `scan_refaced` when that is written, with the template part of the refaced image in turbo. Extra images get a defaced-only GIF each. Open it in any browser. |
 | `scan_txn-to-tal_itk.tfm` | The rotation to template orientation, as an ITK transform. |

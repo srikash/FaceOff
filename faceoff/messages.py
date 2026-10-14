@@ -88,7 +88,7 @@ class ConsoleReporter(Reporter):
             f"{yes_no[options.crop and options.reorient]}   "
             f"[bold]Reface:[/bold] {yes_no[options.reface]}   "
             f"[bold]Enucleate:[/bold] {yes_no[options.remove_eyes]}   "
-            f"[bold]Renucleate:[/bold] {yes_no[options.renucleate]}   "
+            f"[bold]Renucleate:[/bold] {yes_no[options.put_back_eyes]}   "
             f"[bold]QC:[/bold] {yes_no[options.qc]}   "
             f"[bold]SyN:[/bold] {yes_no[options.syn]}"
         )
@@ -109,6 +109,10 @@ class ConsoleReporter(Reporter):
         log(f"Completed: {message} in {format_elapsed(now - self._last)}")
         self._last = now
 
+    def warn(self, message: str) -> None:
+        """Print a problem that did not stop the run."""
+        log(f"[yellow]{message}[/]")
+
     def cropped(self, crop: Crop) -> None:
         """Print which of the scan's own slices were kept."""
         log(
@@ -120,7 +124,7 @@ class ConsoleReporter(Reporter):
         """Print the total time and a tick for every file written."""
         success(f"Finished in {format_elapsed(monotonic() - self._start)}")
         if self._outputs is not None:
-            for path in self._outputs.written():
+            for path in filter(Path.exists, self._outputs.written()):
                 shown = path.relative_to(Path.cwd()) if path.is_relative_to(Path.cwd()) else path
                 console.print(f"  [green]✓[/green] {shown}", soft_wrap=True)
         console.print()

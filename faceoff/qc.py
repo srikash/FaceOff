@@ -87,10 +87,10 @@ class _Section:
 def _ras(image: nib.Nifti1Image) -> tuple[np.ndarray, tuple[float, float, float]]:
     """Return the first volume in RAS orientation (x right, y anterior, z superior), and the
     voxel size along those axes."""
+    while image.ndim > 3:  # a 4D image (GRE echoes, ...): show the first volume, read alone
+        image = image.slicer[..., 0]
     canonical = nib.as_closest_canonical(image)
     data = np.asarray(canonical.dataobj, dtype=np.float32)
-    while data.ndim > 3:  # a 4D image (GRE echoes, ...): show the first volume
-        data = data[..., 0]
     zooms = tuple(float(z) for z in canonical.header.get_zooms()[:3])
     return data, zooms
 
@@ -183,7 +183,7 @@ def write_page(
             f'{titles}</div><img alt="Sagittal sweep of {escape(section.name)}" '
             f'src="data:image/gif;base64,{gif}"></div></section>'
         )
-    path.write_text(f"""<!doctype html>
+    path.write_text(encoding="utf-8", data=f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FaceOff QC</title>
 <style>

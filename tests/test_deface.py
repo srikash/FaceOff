@@ -164,13 +164,58 @@ def test_input_is_not_an_extra_image(tmp_path, template):
 
 
 class RecordingReporter(deface.Reporter):
-    """Notes down the crops a run reports."""
+    """Notes down the crops and warnings a run reports."""
 
     def __init__(self) -> None:
         self.crops: list[Crop] = []
+        self.warnings: list[str] = []
+
+    def warn(self, message: str) -> None:
+        self.warnings.append(message)
 
     def cropped(self, crop: Crop) -> None:
         self.crops.append(crop)
+
+
+def test_reface_with_enucleate_puts_the_eyes_back_like_renucleate(tmp_path, template):
+    results = []
+    for name, flags in (("a", {"reface": True, "enucleate": True}),
+                        ("b", {"reface": True, "renucleate": True}),
+                        ("c", {"reface": True, "enucleate": True, "renucleate": True})):
+        scan = _save(tmp_path / f"{name}.nii.gz", np.full((6, 5, 4), 7, np.int16))
+        options = deface.Options(threads=1, crop=False, qc=False, template=template, **flags)
+        outputs = deface.run(scan, options, ants=FakeAnts())
+        results.append((np.asanyarray(nib.load(outputs.defaced).dataobj),
+                        np.asanyarray(nib.load(outputs.refaced).dataobj)))
+    defaced, refaced = results[0]
+    assert (defaced[:3] == 0).all()  # the face and the eyes are removed ...
+    np.testing.assert_allclose(refaced[:2], 17.5)  # ... the template face goes back ...
+    np.testing.assert_allclose(refaced[2], 7)  # ... and so do the template eyes
+    for other_defaced, other_refaced in results[1:]:  # --renucleate is then redundant
+        np.testing.assert_array_equal(defaced, other_defaced)
+        np.testing.assert_array_equal(refaced, other_refaced)
+
+
+def test_reface_alone_leaves_the_eyes_as_they_are(tmp_path, template):
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    options = deface.Options(threads=1, crop=False, qc=False, reface=True, template=template)
+    outputs = deface.run(subject, options, ants=FakeAnts())
+    assert (np.asanyarray(nib.load(outputs.defaced).dataobj)[2] == 7).all()
+
+
+def test_a_failing_qc_page_does_not_stop_the_defacing(tmp_path, template, monkeypatch):
+    def broken(*args, **kwargs):
+        raise RuntimeError("no pixels today")
+
+    monkeypatch.setattr(deface.qc, "write_page", broken)
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    reporter = RecordingReporter()
+    options = deface.Options(threads=1, crop=False, template=template)
+    outputs = deface.run(subject, options, reporter, FakeAnts())
+    assert outputs.qc is None
+    assert outputs.txn_itk.exists() and outputs.txn_fsl.exists() and outputs.tal_defaced.exists()
+    assert not list(tmp_path.glob("*_faceoff_qc.html"))
+    assert any("no pixels today" in message for message in reporter.warnings)
 
 
 def test_crop_is_reported_once_and_applied_to_the_tal_outputs(tmp_path, template):

@@ -18,6 +18,9 @@ def test_console_reporter_prints_settings_steps_and_files(monkeypatch, tmp_path)
     reporter.begin(tmp_path / "scan.nii.gz", options, outputs)
     reporter.step("deface mask")
     reporter.cropped(Crop(axis=2, first=79, last=256, size=256))
+    for written in outputs.written():
+        if written.name != "scan_faceoff_qc.html":  # a page that failed is not ticked
+            written.touch()
     reporter.end()
 
     text = console.export_text()
@@ -28,3 +31,4 @@ def test_console_reporter_prints_settings_steps_and_files(monkeypatch, tmp_path)
     assert "Cropped to native slices 79-255 of 256 along voxel axis 2" in text
     for name in ("scan_defaced.nii.gz", "scan_tal_refaced.nii.gz", "scan_txn-to-tal_fsl.mat"):
         assert f"✓ {name}" in text
+    assert "✓ scan_faceoff_qc.html" not in text

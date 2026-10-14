@@ -3,7 +3,7 @@ put the template's face and eyes back if asked, and reorient."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import nibabel as nib
@@ -35,7 +35,8 @@ class Options:
     enucleate: bool = False
     # Also put the template's eyes in place of the removed ones (like reface, for the eyes).
     # This removes the eyes too, so it implies enucleate. With reface, the refaced image gets
-    # both the face and the eyes; without it, the face stays removed there.
+    # both the face and the eyes; without it, the face stays removed there. Reface together
+    # with enucleate already puts the eyes back, so renucleate is then redundant.
     renucleate: bool = False
     # Also write a QC page (name_faceoff_qc.html): a GIF of the defaced (and refaced) scan for
     # each image.
@@ -55,9 +56,16 @@ class Options:
         return self.enucleate or self.renucleate
 
     @property
+    def put_back_eyes(self) -> bool:
+        """True when the template's eyes are put back: --renucleate, or --reface with
+        --enucleate (which would otherwise leave half-filled eyeballs, because the face mask
+        overlaps the eyes)."""
+        return self.renucleate or (self.reface and self.enucleate)
+
+    @property
     def refill(self) -> bool:
-        """True when the template's face and/or eyes are put back (--reface, --renucleate)."""
-        return self.reface or self.renucleate
+        """True when the template's face and/or eyes are put back."""
+        return self.reface or self.put_back_eyes
 
 
 @dataclass(frozen=True)
@@ -129,8 +137,9 @@ class Reporter:
     """Where a run reports its progress. This one stays silent; the command line uses
     `messages.ConsoleReporter`, which prints to the terminal.
 
-    A run calls `begin` once, `step` after each finished step, `cropped` once if the
-    template-orientation outputs are cropped, and `end` once.
+    A run calls `begin` once, `step` after each finished step, `warn` for a problem that does
+    not stop the run, `cropped` once if the template-orientation outputs are cropped, and `end`
+    once.
     """
 
     def begin(self, input_file: Path, options: Options, outputs: Outputs) -> None:
@@ -138,6 +147,9 @@ class Reporter:
 
     def step(self, message: str) -> None:
         """Called after each step finishes, with a short description of it."""
+
+    def warn(self, message: str) -> None:
+        """Called when something optional, such as the QC page, could not be written."""
 
     def cropped(self, crop: Crop) -> None:
         """Called once with the slices of the input that were kept."""
@@ -239,13 +251,13 @@ def run(
 
         # Extra images may have their own voxel grid, so the masks are warped onto each
         # one's grid rather than reused; on the input's grid this gives the same mask.
-        extra_defaced_images = []
+        qc_extras = []
         for n, (extra, target) in enumerate(zip(extras, outputs.extra_defaced, strict=True)):
             extra_face, extra_eyes = _warp_masks(tx, ws, template, options, f"extra{n}", extra)
             extra_keep = masking.keep_mask(extra_face, extra_eyes)
-            extra_defaced_image = masking.deface(nib.load(extra), extra_keep)
-            nib.save(extra_defaced_image, target)
-            extra_defaced_images.append(extra_defaced_image)
+            nib.save(masking.deface(nib.load(extra), extra_keep), target)
+            if outputs.qc:  # the QC page reads the saved file back, one volume at a time
+                qc_extras.append((extra.name, target))
         if extras:
             reporter.step(f"face taken… off {len(extras)} extra image(s)")
 
@@ -255,22 +267,16 @@ def run(
             brain_in_subject = ws.path("template_brain_in_subject.nii.gz")
             tx.to_subject(template.t1w, ref_in_subject, Stage.REFACE, "Linear")
             tx.to_subject(template.brain_mask, brain_in_subject, Stage.REFACE)
-            fill = masking.fill_region(face, eyes, options.reface, options.renucleate)
+            fill = masking.fill_region(face, eyes, options.reface, options.put_back_eyes)
             refaced, scale = masking.reface(
                 defaced, keep, nib.load(ref_in_subject), nib.load(brain_in_subject), fill
             )
             nib.save(refaced, outputs.refaced)
             put_back = " and ".join(
-                [*(["face"] if options.reface else []), *(["eyes"] if options.renucleate else [])]
+                part for part, wanted in (("face", options.reface), ("eyes", options.put_back_eyes))
+                if wanted
             )
             reporter.step(f"template {put_back} inserted (intensity scale {scale:.3g})")
-
-        if outputs.qc:
-            named_extras = [
-                (path.name, image) for path, image in zip(extras, extra_defaced_images, strict=True)
-            ]
-            qc.write_page(outputs.qc, subject.name, defaced, refaced, fill, named_extras)
-            reporter.step("QC page")
 
         # The face is already removed. Save the rotation part of the affine; unless switched
         # off, write the images in template orientation (header only, no resampling).
@@ -283,6 +289,18 @@ def run(
             reporter.step("reorientation (header only) and ITK/FSL transforms")
         else:
             reporter.step("ITK/FSL transforms (image not reoriented)")
+
+        # The QC page is written last: a problem with it must not stop the defacing.
+        if outputs.qc:
+            try:
+                qc.write_page(
+                    outputs.qc, subject.name, defaced, refaced, fill,
+                    [(name, nib.load(path)) for name, path in qc_extras],
+                )
+                reporter.step("QC page")
+            except Exception as problem:  # noqa: BLE001 (any failure here is only a warning)
+                reporter.warn(f"No QC page: {type(problem).__name__}: {problem}")
+                outputs = replace(outputs, qc=None)
 
     reporter.end()
     return outputs
