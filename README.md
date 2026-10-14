@@ -2,7 +2,8 @@
 
 Deface anatomical MRI scans with ANTs, run in Docker so you don't have to install it. It removes the face and, if you ask, inserts a template face in its place.
 
-- It saves the rotation to template orientation as ITK and FSL transforms, and writes reoriented copies trimmed to the head. Only the header changes; nothing is resampled.
+Other features include rotation to template orientation and automatic cropping, all done with no interpolation.
+
 - `--extra-images` gives other images from the same session (MP2RAGE, multi-echo GRE) the same mask.
 - `--batch` defaces many scans in one go.
 
