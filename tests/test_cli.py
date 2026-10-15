@@ -58,7 +58,7 @@ def test_eye_flags_reach_the_defacing(tmp_path, runs):
     assert result.exit_code == 0, result.output
     [(_, options)] = runs
     assert (options.enucleate, options.renucleate) == (False, True)
-    assert options.remove_eyes and options.refill
+    assert options.regions.removes_eyes and options.regions.fills_eyes
 
 
 def test_qc_is_on_by_default_and_no_qc_turns_it_off(tmp_path, runs):

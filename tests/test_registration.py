@@ -15,7 +15,7 @@ TEMPLATE = Template(Path("/template"))
 
 
 def _register(ants, syn: bool, reface: bool):
-    return register(ants, Workspace(WS), SUBJECT, TEMPLATE, syn=syn, reface=reface)
+    return register(ants, Workspace(WS), SUBJECT, TEMPLATE, syn=syn, face=reface)
 
 
 def _chain(syn: bool, reface: bool, stage: Stage) -> list[str]:
@@ -30,11 +30,11 @@ def _chain(syn: bool, reface: bool, stage: Stage) -> list[str]:
 
 
 def test_deface_affine_only_uses_inverse_affine():
-    assert _chain(False, False, Stage.DEFACE) == ["--transform", "[/WS/affine_0GenericAffine.mat,1]"]
+    assert _chain(False, False, Stage.AFFINE) == ["--transform", "[/WS/affine_0GenericAffine.mat,1]"]
 
 
 def test_deface_with_syn_chains_affine_head_and_brain_warps():
-    assert _chain(True, False, Stage.DEFACE) == [
+    assert _chain(True, False, Stage.NONLINEAR_BRAIN) == [
         "--transform", "[/WS/affine_0GenericAffine.mat,1]",
         "--transform", "/WS/head_1InverseWarp.nii.gz",
         "--transform", "/WS/brain_2InverseWarp.nii.gz",
@@ -43,14 +43,14 @@ def test_deface_with_syn_chains_affine_head_and_brain_warps():
 
 def test_reface_inverse_affine_comes_before_inverse_warp():
     """antsApplyTransforms: earlier transforms' inverses first, last-fitted warp last."""
-    assert _chain(False, True, Stage.REFACE) == [
+    assert _chain(False, True, Stage.NONLINEAR_FACE) == [
         "--transform", "[/WS/affine_0GenericAffine.mat,1]",
         "--transform", "/WS/face_1InverseWarp.nii.gz",
     ]
 
 
 def test_reface_after_syn_is_third_warp():
-    assert _chain(True, True, Stage.REFACE) == [
+    assert _chain(True, True, Stage.NONLINEAR_FACE) == [
         "--transform", "[/WS/affine_0GenericAffine.mat,1]",
         "--transform", "/WS/head_1InverseWarp.nii.gz",
         "--transform", "/WS/brain_2InverseWarp.nii.gz",
@@ -60,7 +60,7 @@ def test_reface_after_syn_is_third_warp():
 
 def test_reface_without_reface_registration_is_an_error():
     with pytest.raises(ValueError):
-        _chain(False, False, Stage.REFACE)
+        _chain(False, False, Stage.NONLINEAR_FACE)
 
 
 @pytest.mark.parametrize(
@@ -139,10 +139,19 @@ def test_a_4d_image_is_warped_onto_through_a_3d_copy_of_its_grid(tmp_path):
     echoes = tmp_path / "gre.nii.gz"
     nib.save(nib.Nifti1Image(np.zeros((6, 5, 4, 3), np.int16), np.diag([2.0, 1, 1, 1])), echoes)
     ants = RecordingAnts()
-    tx = register(ants, Workspace(tmp_path), SUBJECT, TEMPLATE, syn=False, reface=False)
-    tx.to_subject(TEMPLATE.face_mask, tmp_path / "out.nii.gz", Stage.DEFACE, reference=echoes)
+    tx = register(ants, Workspace(tmp_path), SUBJECT, TEMPLATE, syn=False, face=False)
+    tx.to_subject(TEMPLATE.face_mask, tmp_path / "out.nii.gz", Stage.AFFINE, reference=echoes)
     args = ants.calls[-1][1]
     grid = Path(args[args.index("--reference-image") + 1])
     assert grid.name == "grid_for_out.nii.gz"
     assert nib.load(grid).shape == (6, 5, 4)
     assert np.allclose(nib.load(grid).affine, np.diag([2.0, 1, 1, 1]))
+
+
+def test_the_affine_stage_ignores_any_nonlinear_warps():
+    assert _chain(True, True, Stage.AFFINE) == ["--transform", "[/WS/affine_0GenericAffine.mat,1]"]
+
+
+def test_asking_for_a_warp_that_was_not_fitted_is_an_error():
+    with pytest.raises(ValueError, match="--syn"):
+        _chain(False, True, Stage.NONLINEAR_BRAIN)

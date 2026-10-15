@@ -11,6 +11,7 @@ The editable install downloads the template files from Zenodo once, into `faceof
 ```
 faceoff/cli.py          the faceoff command and its help screen
 faceoff/deface.py       defaces one scan from start to finish
+faceoff/regions.py      what happens to the face and eyes, worked out once from the flags
 faceoff/registration.py the ANTs registration, and moving template images onto the scan
 faceoff/qc.py           the QC page: sagittal GIFs of the defaced and refaced scans
 faceoff/masking.py      removing the face and eyes, and inserting the template face and eyes

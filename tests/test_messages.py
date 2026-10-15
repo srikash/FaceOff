@@ -25,7 +25,8 @@ def test_console_reporter_prints_settings_steps_and_files(monkeypatch, tmp_path)
 
     text = console.export_text()
     assert "ANTs: antsx/ants:2.6.5 in Docker (3 threads)" in text
-    assert "Reface: yes" in text and "SyN: no" in text
+    assert "Removes: face.  Fills from the template: face.  " in text
+    assert "Registration: affine, then nonlinear face (MI)." in text
     assert "next hundred years" in text  # the --reface quote
     assert "Completed: deface mask in" in text
     assert "Cropped to native slices 79-255 of 256 along voxel axis 2" in text

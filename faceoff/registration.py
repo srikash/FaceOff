@@ -21,15 +21,16 @@ from .template import Template
 
 
 class Stage(Enum):
-    """Which registration to use when bringing a template image onto the scan.
+    """Which registration moves a template image onto the scan.
 
-    DEFACE: the affine (or, with --syn, the SyN warp: whole head, then brain-masked). REFACE:
-    also the SyN warp fitted over the face, so the template face matches the scan's face more
-    closely.
+    AFFINE: the affine only. NONLINEAR_BRAIN: the affine, then the --syn warps (whole head
+    with MI, then the brain with CC). NONLINEAR_FACE: those, then the warp fitted over the face
+    (MI), so the template face and eyes match the scan's more closely.
     """
 
-    DEFACE = "deface"
-    REFACE = "reface"
+    AFFINE = "affine"
+    NONLINEAR_BRAIN = "nonlinear brain"
+    NONLINEAR_FACE = "nonlinear face"
 
 
 class _SynSchedule(NamedTuple):
@@ -135,10 +136,14 @@ class Transforms:
         """Return the ANTs `--transform` arguments that take template space to the scan."""
         # Order matters: the inverse affine first, then the inverse warps in the order they
         # were fitted, the last-fitted warp last. The reverse order silently gives wrong output.
-        warps = list(self._brain_warps)
-        if stage is Stage.REFACE:
+        warps: list[Path] = []
+        if stage is not Stage.AFFINE:
+            warps += self._brain_warps
+        if stage is Stage.NONLINEAR_BRAIN and not self._brain_warps:
+            raise ValueError("No nonlinear brain registration (--syn) was run.")
+        if stage is Stage.NONLINEAR_FACE:
             if self._face_warp is None:
-                raise ValueError("No reface registration was run.")
+                raise ValueError("No nonlinear face registration was run.")
             warps.append(self._face_warp)
         chain = ["--transform", f"[{self.affine},1]"]
         for warp in warps:
@@ -153,10 +158,11 @@ def register(
     template: Template,
     *,
     syn: bool,
-    reface: bool,
+    face: bool,
 ) -> Transforms:
-    """Register the scan to the template: centre-of-mass start, rigid, affine, then SyN if
-    `syn` or `reface` is set. Returns the result, ready to move template images onto the scan.
+    """Register the scan to the template: centre-of-mass start, rigid, affine, then the
+    nonlinear brain registration if `syn`, and the nonlinear face registration if `face`.
+    Returns the result, ready to move template images onto the scan.
     """
     init = ws.path("init.mat")
     ants.run("antsAI", [
@@ -173,9 +179,10 @@ def register(
     # and writes its own warp and inverse warp. They are not merged into one file: the steps
     # end at different resolutions (2 mm and 1 mm warps), which ANTs cannot combine. They are
     # still applied together, in one antsApplyTransforms call (see Transforms.to_subject).
-    # The deface SyN (--syn) is not required (the affine alone already gives the deface mask)
-    # and is kept for completeness: it fits the whole head with MI, then the brain with CC.
-    # The reface SyN starts from that (or the affine) and is fitted over the reface mask.
+    # The nonlinear brain registration (--syn) is not required (the affine alone already gives
+    # the deface mask) and is kept for completeness: it fits the whole head with MI, then the
+    # brain with CC. The nonlinear face registration starts from that (or the affine) and is
+    # fitted over the reface mask.
     affine = ws.path(f"{_AFFINE_PREFIX}0GenericAffine.mat")
     forward: list[Path] = []  # warps fitted so far, scan to template, in fitting order
     inverse: list[Path] = []
@@ -195,7 +202,7 @@ def register(
         fit(_HEAD_PREFIX, None, _HEAD_SYN)
         fit(_BRAIN_PREFIX, template.brain_mask, _BRAIN_SYN)
     brain_warps = list(inverse)
-    face_warp = fit(_FACE_PREFIX, template.reface_mask, _REFACE_SYN) if reface else None
+    face_warp = fit(_FACE_PREFIX, template.reface_mask, _REFACE_SYN) if face else None
     return Transforms(ants, ws, subject, brain_warps, face_warp)
 
 

@@ -172,14 +172,38 @@ class RecordingReporter(deface.Reporter):
         self.crops.append(crop)
 
 
-def test_the_eye_mask_is_moved_with_the_same_warp_as_the_face_mask(tmp_path, template):
+@pytest.mark.parametrize(("syn", "face_stage"), [
+    (False, Stage.AFFINE), (True, Stage.NONLINEAR_BRAIN),
+])
+def test_the_eyes_always_use_the_face_registration(tmp_path, template, syn, face_stage):
+    """The face mask goes with the affine (or --syn's brain registration); the eye mask, for
+    the scan and for each extra image, with the nonlinear face registration."""
     subject = _save(tmp_path / "t.nii.gz", np.full((6, 5, 4), 7, np.int16))
-    options = deface.Options(threads=1, crop=False, qc=False, enucleate=True, template=template)
+    extra = _save(tmp_path / "inv1.nii.gz", np.full((6, 5, 4), 5, np.int16))
+    options = deface.Options(threads=1, crop=False, qc=False, enucleate=True, syn=syn,
+                             extra_images=(extra,), template=template)
     registration = StandInRegistration()
     deface.run(subject, options, registration=registration)
-    stages = dict(registration.moved)
-    assert stages["faceoff2_mni152_version-ext2020sym_desc-eye_mask.nii.gz"] == Stage.DEFACE
-    assert stages["faceoff2_mni152_version-ext2020sym_desc-face_mask.nii.gz"] == Stage.DEFACE
+    stages = {(name.split("desc-")[1], stage) for name, stage in registration.moved}
+    assert stages == {("face_mask.nii.gz", face_stage), ("eye_mask.nii.gz", Stage.NONLINEAR_FACE)}
+    assert len(registration.moved) == 4  # both masks, for the scan and the extra image
+
+
+def test_the_eye_hole_and_the_template_eyes_come_from_the_same_registration(tmp_path, template):
+    """Give the face registration a 1 mm shift that the affine does not have: the eyes are
+    removed where that registration puts them (slice 3), and filled from it, while the face
+    stays where the affine puts it (slices 0 and 1)."""
+    shift = np.eye(4)
+    shift[0, 3] = 1.0
+    registration = StandInRegistration(per_stage={Stage.NONLINEAR_FACE: shift})
+    subject = _save(tmp_path / "t.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    options = deface.Options(threads=1, crop=False, qc=False, renucleate=True, template=template)
+    outputs = deface.run(subject, options, registration=registration)
+    defaced = np.asanyarray(nib.load(outputs.defaced).dataobj)
+    refaced = np.asanyarray(nib.load(outputs.refaced).dataobj)
+    assert (defaced[:2] == 0).all() and (defaced[2] == 7).all() and (defaced[3] == 0).all()
+    np.testing.assert_allclose(refaced[3], 7)  # template eye (20) scaled to the scan (7 / 20)
+    np.testing.assert_allclose(refaced[:2], 0)  # the face stays removed
 
 
 def test_reface_with_enucleate_puts_the_eyes_back_like_renucleate(tmp_path, template):

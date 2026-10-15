@@ -277,8 +277,9 @@ def _deface_with_timer(path: Path, options: deface.Options) -> None:
 )
 @click.option(
     "--enucleate", is_flag=True,
-    help="Also remove the eyes, using the template's eye mask. With --reface, the template's "
-    "eyes are put back too, as with --renucleate.",
+    help="Also remove the eyes, using the template's eye mask, moved onto the scan with a "
+    "nonlinear registration over the face. With --reface, the template's eyes are put back "
+    "too, as with --renucleate.",
 )
 @click.option(
     "--renucleate", is_flag=True,
@@ -298,9 +299,10 @@ def _deface_with_timer(path: Path, options: deface.Options) -> None:
 )
 @click.option(
     "--syn", is_flag=True,
-    help="Not required; included for completeness. Adds a slower registration and uses it "
-    "for the deface mask, and for the eye mask with --enucleate or --renucleate. The default "
-    "registration already gives almost the same masks.",
+    help="Not required; included for completeness. Adds a slower nonlinear registration "
+    "(whole head, then brain) and moves the face mask with it. The default affine "
+    "registration already gives almost the same mask. The eyes always use the nonlinear "
+    "registration over the face.",
 )
 @click.option(
     "--engine", type=click.Choice(ENGINES), default=None,

@@ -11,6 +11,7 @@ import nibabel as nib
 
 from . import masking, qc
 from .ants import Container
+from .regions import Regions
 from .registration import Stage, Transforms, register
 from .reorient import Crop, TalReorientation
 from .scratch import Workspace, workspace
@@ -52,21 +53,9 @@ class Options:
     container: Container = field(default_factory=Container.default)
 
     @property
-    def remove_eyes(self) -> bool:
-        """True when the eyes are removed (--enucleate, or --renucleate which implies it)."""
-        return self.enucleate or self.renucleate
-
-    @property
-    def put_back_eyes(self) -> bool:
-        """True when the template's eyes are put back: --renucleate, or --reface with
-        --enucleate (which would otherwise leave half-filled eyeballs, because the face mask
-        overlaps the eyes)."""
-        return self.renucleate or (self.reface and self.enucleate)
-
-    @property
-    def refill(self) -> bool:
-        """True when the template's face and/or eyes are put back."""
-        return self.reface or self.put_back_eyes
+    def regions(self) -> Regions:
+        """What happens to the face and the eyes with these flags."""
+        return Regions(self.reface, self.enucleate, self.renucleate, self.syn)
 
 
 @dataclass(frozen=True)
@@ -96,15 +85,16 @@ class Outputs:
         name = strip_extension(scan)
         extra_names = [strip_extension(extra) for extra in extras]
         tal = options.reorient
+        refaced = options.regions.writes_refaced
         return cls(
             deface_mask=Path(f"{name}_defaceMask.nii.gz"),
             defaced=Path(f"{name}_defaced.nii.gz"),
             txn_itk=Path(f"{name}_txn-to-tal_itk.tfm"),
             txn_fsl=Path(f"{name}_txn-to-tal_fsl.mat"),
-            refaced=Path(f"{name}_refaced.nii.gz") if options.refill else None,
+            refaced=Path(f"{name}_refaced.nii.gz") if refaced else None,
             tal_defaced=Path(f"{name}_tal_defaced.nii.gz") if tal else None,
             tal_deface_mask=Path(f"{name}_tal_defaceMask.nii.gz") if tal else None,
-            tal_refaced=Path(f"{name}_tal_refaced.nii.gz") if tal and options.refill else None,
+            tal_refaced=Path(f"{name}_tal_refaced.nii.gz") if tal and refaced else None,
             qc=Path(f"{name}_faceoff_qc.html") if options.qc else None,
             extra_defaced=tuple(Path(f"{n}_defaced.nii.gz") for n in extra_names),
             extra_tal_defaced=(
@@ -163,22 +153,24 @@ def _warp_masks(
     tx: Transforms,
     ws: Workspace,
     template: Template,
-    options: Options,
+    regions: Regions,
     label: str,
     reference: Path | None = None,
 ) -> tuple[nib.Nifti1Image, nib.Nifti1Image | None]:
     """Move the template's face mask, and its eye mask when the eyes are removed, onto the scan
-    (or onto `reference`, an image in the same space with its own grid).
+    (or onto `reference`, an image in the same space with its own grid). The face mask goes
+    with the affine (or the nonlinear brain registration with --syn); the eye mask with the
+    nonlinear face registration.
 
     `label` names the files in the scratch folder. Returns the two masks, the second being
     None when the eyes stay.
     """
     face = ws.path(f"face_mask_in_{label}.nii.gz")
-    tx.to_subject(template.face_mask, face, Stage.DEFACE, reference=reference)
-    if not options.remove_eyes:
+    tx.to_subject(template.face_mask, face, regions.face_mask_stage, reference=reference)
+    if not regions.removes_eyes:
         return nib.load(face), None
     eyes = ws.path(f"eye_mask_in_{label}.nii.gz")
-    tx.to_subject(template.eye_mask, eyes, Stage.DEFACE, reference=reference)
+    tx.to_subject(template.eye_mask, eyes, regions.eye_mask_stage, reference=reference)
     return nib.load(face), nib.load(eyes)
 
 
@@ -220,7 +212,8 @@ def register_with_ants(ws: Workspace, subject: Path, options: Options) -> Transf
     """Register the scan to the template with ANTs, run as `options.container` says (your
     own install if it is on your PATH, otherwise Docker, by default)."""
     ants = options.container.runner(options.threads, scratch=ws.root)
-    return register(ants, ws, subject, options.template, syn=options.syn, reface=options.refill)
+    face = options.regions.needs_face_registration
+    return register(ants, ws, subject, options.template, syn=options.syn, face=face)
 
 
 def run(
@@ -242,11 +235,12 @@ def run(
     reporter.begin(subject, options, outputs)
 
     with workspace() as ws:
+        regions = options.regions
         tx = registration(ws, subject, options)
         reporter.step("registration to the template")
 
         # The template masks mark the region to remove; the deface mask is its inverse.
-        face, eyes = _warp_masks(tx, ws, template, options, "subject")
+        face, eyes = _warp_masks(tx, ws, template, regions, "subject")
         keep = masking.keep_mask(face, eyes)
         nib.save(keep, outputs.deface_mask)
         reporter.step("deface mask")
@@ -259,7 +253,7 @@ def run(
         # one's grid rather than reused; on the input's grid this gives the same mask.
         qc_extras = []
         for n, (extra, target) in enumerate(zip(extras, outputs.extra_defaced, strict=True)):
-            extra_face, extra_eyes = _warp_masks(tx, ws, template, options, f"extra{n}", extra)
+            extra_face, extra_eyes = _warp_masks(tx, ws, template, regions, f"extra{n}", extra)
             extra_keep = masking.keep_mask(extra_face, extra_eyes)
             nib.save(masking.deface(nib.load(extra), extra_keep), target)
             if outputs.qc:  # the QC page reads the saved file back, one volume at a time
@@ -268,20 +262,18 @@ def run(
             reporter.step(f"face taken… off {len(extras)} extra image(s)")
 
         refaced = fill = None
-        if options.refill:
+        if regions.writes_refaced:
             ref_in_subject = ws.path("template_ref_in_subject.nii.gz")
             brain_in_subject = ws.path("template_brain_in_subject.nii.gz")
-            tx.to_subject(template.t1w, ref_in_subject, Stage.REFACE, "Linear")
-            tx.to_subject(template.brain_mask, brain_in_subject, Stage.REFACE)
-            fill = masking.fill_region(face, eyes, options.reface, options.put_back_eyes)
+            tx.to_subject(template.t1w, ref_in_subject, Stage.NONLINEAR_FACE, "Linear")
+            tx.to_subject(template.brain_mask, brain_in_subject, Stage.NONLINEAR_FACE)
+            fill = masking.fill_region(face, eyes, regions.fills_face, regions.fills_eyes)
             refaced, scale = masking.reface(
                 defaced, keep, nib.load(ref_in_subject), nib.load(brain_in_subject), fill
             )
             nib.save(refaced, outputs.refaced)
-            put_back = " and ".join(
-                part for part, wanted in (("face", options.reface), ("eyes", options.put_back_eyes))
-                if wanted
-            )
+            filled = (("face", regions.fills_face), ("eyes", regions.fills_eyes))
+            put_back = " and ".join(part for part, wanted in filled if wanted)
             reporter.step(f"template {put_back} inserted (intensity scale {scale:.3g})")
 
         # The face is already removed. Save the rotation part of the affine; unless switched

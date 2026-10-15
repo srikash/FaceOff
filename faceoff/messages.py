@@ -86,15 +86,12 @@ class ConsoleReporter(Reporter):
             f"[bold]Reorient:[/bold] {yes_no[options.reorient]}   "
             f"[bold]Crop (z {TEMPLATE_CROP_Z_MM[0]:g} to {TEMPLATE_CROP_Z_MM[1]:g} mm):[/bold] "
             f"{yes_no[options.crop and options.reorient]}   "
-            f"[bold]Reface:[/bold] {yes_no[options.reface]}   "
-            f"[bold]Enucleate:[/bold] {yes_no[options.remove_eyes]}   "
-            f"[bold]Renucleate:[/bold] {yes_no[options.put_back_eyes]}   "
-            f"[bold]QC:[/bold] {yes_no[options.qc]}   "
-            f"[bold]SyN:[/bold] {yes_no[options.syn]}"
+            f"[bold]QC:[/bold] {yes_no[options.qc]}"
         )
+        console.print(options.regions.describe(), soft_wrap=True)
         console.print()
         quote("It's like looking in a mirror, only… not.", "Face/Off (1997)")
-        if options.syn or options.refill:
+        if options.syn or options.regions.needs_face_registration:
             console.print()
             quote(
                 "Looks like you're going to be in here for the next hundred years.",
