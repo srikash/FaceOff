@@ -62,6 +62,6 @@ done
 
 ## Run time
 
-On a 12-core workstation, a 1 mm isotropic scan takes about 10 seconds with the defaults, plus a few seconds for each extra image. `--reface` and `--renucleate` take about 5 minutes. Adding `--syn` takes about 7 minutes more. Pass `-n` to use fewer cores.
+On a 12-core workstation, a 1 mm isotropic scan takes about 12 seconds with the defaults, plus a few seconds for each extra image. `--enucleate` takes about 47 seconds, and `--reface` or `--renucleate` about a minute, because they add the nonlinear registration over the face. Adding `--syn` takes about 10 minutes more. Pass `-n` to use fewer cores.
 
 [Back to the README](../README.md)
