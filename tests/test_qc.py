@@ -36,13 +36,13 @@ def test_the_interface_is_one_function():
             and getattr(getattr(qc, name), "__module__", "") == "faceoff.qc"] == ["write_page"]
 
 
-def test_a_defaced_image_alone_gives_one_title_and_a_gif_at_10_fps(tmp_path):
+def test_a_defaced_image_alone_gives_one_title_and_a_gif_at_the_set_frame_rate(tmp_path):
     html = _page(tmp_path, _head())
     assert html.count("<img") == 1
     assert _titles(html) == ["defaced"]
     assert "repeat(1,1fr)" in html
     gif = _gif_of(html)
-    assert gif.info["duration"] == 100
+    assert gif.info["duration"] == 1000 // qc.FPS
     assert 1 < gif.n_frames <= qc.TARGET_FRAMES
 
 

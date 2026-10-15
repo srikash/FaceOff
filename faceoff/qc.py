@@ -21,7 +21,7 @@ import nibabel as nib
 import numpy as np
 from PIL import Image, ImageDraw
 
-FPS = 10
+FPS = 5
 TARGET_FRAMES = 30  # about 3 s per loop, whatever the scan's resolution
 PANEL_HEIGHT = 190  # pixels; the width follows the head's shape, so the page stays light
 NOISE_FLOOR = 0.05  # of the brightest voxels: dropped, because noise makes GIFs much larger
