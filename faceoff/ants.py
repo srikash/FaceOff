@@ -176,7 +176,9 @@ class Container:
         if self.engine not in ENGINES:
             raise ValueError(f"Unknown engine {self.engine!r}; use docker, apptainer or local.")
         if self.sif is not None and self.engine != "apptainer":
-            raise ValueError("An image file (--sif) needs --engine apptainer.")
+            raise ValueError(
+                f"--sif is an Apptainer image; use it without --engine {self.engine}."
+            )
 
     @property
     def image(self) -> str:

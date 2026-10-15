@@ -11,6 +11,7 @@ import nibabel as nib
 
 from . import masking, qc
 from .ants import Container
+from .inputs import ScanToDeface, strip_extension
 from .regions import Regions
 from .registration import Stage, Transforms, register
 from .reorient import Crop, TalReorientation
@@ -43,9 +44,6 @@ class Options:
     # Also write a QC page (name_faceoff_qc.html): a GIF of the defaced (and refaced) scan for
     # each image.
     qc: bool = True
-    # Other images from the same session and scanner space as the input (other MP2RAGE
-    # images, GRE echoes, ...): they get the same deface mask and reorientation, not a face.
-    extra_images: tuple[Path, ...] = ()
     # The template to register to; the tests pass a small synthetic one.
     template: Template = field(default_factory=Template.default)
     # How ANTs is run: your own install if its tools are on your PATH, otherwise Docker (or
@@ -174,40 +172,6 @@ def _warp_masks(
     return nib.load(face), nib.load(eyes)
 
 
-def strip_extension(path: Path) -> Path:
-    """Return the file name without .nii or .nii.gz (`scan.nii.gz` becomes `scan`).
-
-    Raises ValueError for any other file type.
-    """
-    name = path.name
-    if name.endswith(".nii.gz"):
-        return path.parent / name[:-7]
-    if name.endswith(".nii"):
-        return path.parent / name[:-4]
-    raise ValueError(f"Unsupported extension: {path.name}. Must be .nii or .nii.gz")
-
-
-def check_inputs(input_file: Path, options: Options) -> tuple[Path, list[Path]]:
-    """Check the input scan and any extra images before anything runs.
-
-    Every file must exist and be a .nii or .nii.gz file, and the input must not also be
-    listed as an extra image. Returns the full paths of the input and the extra images.
-    Raises FileNotFoundError or ValueError if something is wrong.
-    """
-    subject = input_file.resolve()
-    if not subject.exists():
-        raise FileNotFoundError(f"Input file not found: {subject}")
-    strip_extension(subject)
-    extras = [path.resolve() for path in options.extra_images]
-    for extra in extras:
-        if not extra.exists():
-            raise FileNotFoundError(f"Extra image not found: {extra}")
-        strip_extension(extra)
-        if extra == subject:
-            raise ValueError(f"{extra.name} is the input itself; do not list it in extra images.")
-    return subject, extras
-
-
 def register_with_ants(ws: Workspace, subject: Path, options: Options) -> Transforms:
     """Register the scan to the template with ANTs, run as `options.container` says (your
     own install if it is on your PATH, otherwise Docker, by default)."""
@@ -217,19 +181,22 @@ def register_with_ants(ws: Workspace, subject: Path, options: Options) -> Transf
 
 
 def run(
-    input_file: Path,
+    scan: ScanToDeface,
     options: Options,
     reporter: Reporter | None = None,
     registration: Callable[[Workspace, Path, Options], Transforms] = register_with_ants,
 ) -> Outputs:
-    """Deface one scan and write the outputs next to it. Returns the names of the files
-    written.
+    """Deface one scan, and its extra images, and write the outputs next to them. Returns the
+    names of the files written. The files were already checked (see inputs.scans_to_deface).
+
+    Extra images are other images from the same session and scanner space (other MP2RAGE
+    images, GRE echoes, ...): they get the same deface mask and reorientation, not a face.
 
     `registration` registers the scan to the template: ANTs by default. The tests pass a
     stand-in that moves template images with a known affine.
     """
     template = options.template
-    subject, extras = check_inputs(input_file, options)
+    subject, extras = scan.scan, list(scan.extra_images)
     reporter = reporter or Reporter()
     outputs = Outputs.for_input(subject, extras, options)
     reporter.begin(subject, options, outputs)

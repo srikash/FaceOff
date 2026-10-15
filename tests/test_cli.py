@@ -13,9 +13,9 @@ def runs(monkeypatch):
     """Replace the container check, the template download, and the defacing; record each run."""
     calls = []
 
-    def fake_run(path, options, reporter):
-        calls.append((Path(path).name, options))
-        if Path(path).name.startswith("bad"):
+    def fake_run(scan, options, reporter):
+        calls.append((scan.scan.name, options, scan.extra_images))
+        if scan.scan.name.startswith("bad"):
             raise AntsError("antsRegistration failed (exit code 1).")
 
     monkeypatch.setattr(ants_module, "local_ants_available", lambda: False)
@@ -46,7 +46,7 @@ def test_flags_reach_the_defacing(tmp_path, runs):
         ["-i", _scan(tmp_path, "a.nii.gz"), "--reface", "--no-crop", "-n", "3"],
     )
     assert result.exit_code == 0, result.output
-    [(name, options)] = runs
+    [(name, options, extras)] = runs
     assert name == "a.nii.gz"
     assert (options.threads, options.reface, options.crop, options.reorient, options.syn) == (
         3, True, False, True, False,
@@ -56,7 +56,7 @@ def test_flags_reach_the_defacing(tmp_path, runs):
 def test_eye_flags_reach_the_defacing(tmp_path, runs):
     result = CliRunner().invoke(cli_module.cli, ["-i", _scan(tmp_path, "a.nii.gz"), "--renucleate"])
     assert result.exit_code == 0, result.output
-    [(_, options)] = runs
+    [(_, options, _)] = runs
     assert (options.enucleate, options.renucleate) == (False, True)
     assert options.regions.removes_eyes and options.regions.fills_eyes
 
@@ -66,14 +66,14 @@ def test_qc_is_on_by_default_and_no_qc_turns_it_off(tmp_path, runs):
     CliRunner().invoke(cli_module.cli, ["-i", scan])
     CliRunner().invoke(cli_module.cli, ["-i", scan, "--no-qc"])
     CliRunner().invoke(cli_module.cli, ["-i", scan, "--qc"])
-    assert [options.qc for _, options in runs] == [True, False, True]
+    assert [options.qc for _, options, _ in runs] == [True, False, True]
 
 
 def test_batch_continues_after_a_failure_and_exits_1(tmp_path, runs):
     batch = ",".join([_scan(tmp_path, "bad.nii.gz"), _scan(tmp_path, "good.nii.gz")])
     result = CliRunner().invoke(cli_module.cli, ["--batch", batch])
     assert result.exit_code == 1
-    assert [name for name, _ in runs] == ["bad.nii.gz", "good.nii.gz"]
+    assert [name for name, *_ in runs] == ["bad.nii.gz", "good.nii.gz"]
     assert "1 of 2 scans failed" in result.output
 
 
@@ -89,24 +89,24 @@ def test_extra_images_are_split_on_commas(tmp_path, runs):
         cli_module.cli, ["-i", _scan(tmp_path, "uni.nii.gz"), "--extra-images", f"{a},{b}"]
     )
     assert result.exit_code == 0, result.output
-    assert runs[0][1].extra_images == (Path(a), Path(b))
+    assert runs[0][2] == (Path(a), Path(b))
 
 
 def test_batch_takes_scans_separated_by_spaces_or_commas(tmp_path, runs):
     a, b, c = (_scan(tmp_path, name) for name in ("a.nii.gz", "b.nii.gz", "c.nii.gz"))
     result = CliRunner().invoke(cli_module.cli, ["--batch", a, f"{b},{c}", "--no-crop"])
     assert result.exit_code == 0, result.output
-    assert [name for name, _ in runs] == ["a.nii.gz", "b.nii.gz", "c.nii.gz"]
-    assert all(not options.crop for _, options in runs)
+    assert [name for name, *_ in runs] == ["a.nii.gz", "b.nii.gz", "c.nii.gz"]
+    assert all(not options.crop for _, options, _ in runs)
 
 
 def test_extra_images_take_spaces_or_commas(tmp_path, runs):
     a, b, c, d = (_scan(tmp_path, f"{n}.nii.gz") for n in "abcd")
     result = CliRunner().invoke(cli_module.cli, ["-i", a, "--extra-images", b, f"{c},{d}"])
     assert result.exit_code == 0, result.output
-    [(name, options)] = runs
+    [(name, options, extras)] = runs
     assert name == "a.nii.gz"
-    assert [p.name for p in options.extra_images] == ["b.nii.gz", "c.nii.gz", "d.nii.gz"]
+    assert [p.name for p in extras] == ["b.nii.gz", "c.nii.gz", "d.nii.gz"]
 
 
 def test_stray_scan_without_batch_is_refused(tmp_path, runs):
@@ -142,7 +142,7 @@ def test_sif_means_apptainer(tmp_path, runs):
     sif = _scan(tmp_path, "ants.sif")
     result = CliRunner().invoke(cli_module.cli, ["-i", _scan(tmp_path, "a.nii.gz"), "--sif", sif])
     assert result.exit_code == 0, result.output
-    [(_, options)] = runs
+    [(_, options, _)] = runs
     assert options.container.engine == "apptainer"
     assert options.container.image == sif
 
@@ -150,7 +150,7 @@ def test_sif_means_apptainer(tmp_path, runs):
 def test_docker_is_the_default_engine(tmp_path, runs):
     result = CliRunner().invoke(cli_module.cli, ["-i", _scan(tmp_path, "a.nii.gz")])
     assert result.exit_code == 0, result.output
-    [(_, options)] = runs
+    [(_, options, _)] = runs
     assert options.container.engine == "docker"
 
 
@@ -183,4 +183,25 @@ def test_sif_is_refused_with_docker(tmp_path, runs):
         "-i", _scan(tmp_path, "a.nii.gz"), "--engine", "docker", "--sif", _scan(tmp_path, "x.sif"),
     ])
     assert result.exit_code == 2
+    assert runs == []
+
+
+def test_a_batch_with_missing_files_stops_before_anything_runs(tmp_path, runs):
+    """Every problem is listed at once, before the first scan starts."""
+    good = _scan(tmp_path, "good.nii.gz")
+    result = CliRunner().invoke(
+        cli_module.cli, ["--batch", good, "typo1.nii.gz", "notes.txt", "typo2.nii.gz"]
+    )
+    assert result.exit_code == 2
+    for name in ("typo1.nii.gz", "notes.txt", "typo2.nii.gz"):
+        assert name in result.output
+    assert "faceoff v" not in result.output  # no banner: it stopped before starting
+    assert runs == []
+
+
+def test_a_bad_thread_count_in_the_environment_is_refused(tmp_path, runs, monkeypatch):
+    monkeypatch.setenv("ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS", "lots")
+    result = CliRunner().invoke(cli_module.cli, ["-i", _scan(tmp_path, "a.nii.gz")])
+    assert result.exit_code == 2
+    assert "ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS" in result.output
     assert runs == []

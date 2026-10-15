@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +18,7 @@ from rich_click.rich_command import RichCommand
 
 from . import deface
 from .ants import ENGINES, AntsError, Container
+from .inputs import ScanToDeface, ants_threads, scans_to_deface
 from .messages import (
     ConsoleReporter,
     console,
@@ -207,17 +207,7 @@ def _split_names(items: list[str]) -> tuple[Path, ...]:
     return tuple(Path(name.strip()) for item in items for name in item.split(",") if name.strip())
 
 
-def _resolve_threads(threads: int | None) -> int:
-    """Return how many threads ANTs may use: --threads if given, otherwise
-    ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS if set, otherwise every core."""
-    if threads is not None:
-        return threads
-    if env_threads := os.environ.get("ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS"):
-        return int(env_threads)
-    return os.cpu_count() or 1
-
-
-def _deface_with_timer(path: Path, options: deface.Options) -> None:
+def _deface_with_timer(scan: ScanToDeface, options: deface.Options) -> None:
     """Deface one scan while a "time elapsed" line ticks below the log (in a terminal only)."""
     with Progress(
         SpinnerColumn(),
@@ -228,7 +218,7 @@ def _deface_with_timer(path: Path, options: deface.Options) -> None:
         disable=not console.is_terminal,
     ) as progress:
         progress.add_task("", total=None)
-        deface.run(path, options, ConsoleReporter())
+        deface.run(scan, options, ConsoleReporter())
 
 
 @click.command(
@@ -251,7 +241,8 @@ def _deface_with_timer(path: Path, options: deface.Options) -> None:
 @click.option(
     "--batch", metavar="FILES",
     help="Several separate scans (commas or spaces between names), each registered and "
-    "defaced on its own. If ANTs fails on one, or a file is missing, the others still run.",
+    "defaced on its own. Every file is checked before the first one starts; if ANTs then fails "
+    "on one, the others still run.",
 )
 @click.option(
     "--extra-images", multiple=True, metavar="FILES",
@@ -349,14 +340,14 @@ def cli(
         )
     extras = _split_names([*extra_images, *context.args]) if extra_images else ()
     files = _split_names([batch, *context.args]) if batch else (input_file,)
-    if sif and engine in ("docker", "local"):
-        raise click.UsageError(f"--sif is an Apptainer image; use it without --engine {engine}.")
-    container = Container(engine or "apptainer", sif) if engine or sif else Container.default()
-    if extras:  # catch a mistyped extra image before ANTs or the template are fetched
-        try:
-            deface.check_inputs(input_file, deface.Options(threads=1, extra_images=extras))
-        except (FileNotFoundError, ValueError) as problem:
-            raise click.BadParameter(str(problem), param_hint="--extra-images") from problem
+    # Every file and number is checked here, before the banner, ANTs, or the template, and
+    # every problem is listed at once.
+    try:
+        container = Container(engine or "apptainer", sif) if engine or sif else Container.default()
+        scans = scans_to_deface(files, extras)
+        threads = ants_threads(threads)
+    except ValueError as problem:  # InputError, or a container choice that does not fit
+        raise click.UsageError(str(problem)) from problem
 
     print_banner()
     if depad:
@@ -369,25 +360,22 @@ def cli(
         raise SystemExit(1) from failure
 
     options = deface.Options(
-        threads=_resolve_threads(threads), syn=syn, reorient=reorient, crop=crop, reface=reface,
-        enucleate=enucleate, renucleate=renucleate, qc=qc, extra_images=extras, container=container,
+        threads=threads, syn=syn, reorient=reorient, crop=crop, reface=reface,
+        enucleate=enucleate, renucleate=renucleate, qc=qc, container=container,
     )
-    if len(files) > 1:
+    if len(scans) > 1:
         quote("This is turning into a real marriage.", "Face/Off (1997)")
         console.print()
 
     failed = []
-    for path in files:
+    for scan in scans:
         try:
-            _deface_with_timer(path, options)
-        except AntsError as failure:
-            error(f"{path}: {failure}")
-            failed.append(path)
-        except (FileNotFoundError, ValueError) as failure:
-            error(str(failure))
-            failed.append(path)
+            _deface_with_timer(scan, options)
+        except AntsError as failure:  # one scan failing in ANTs does not stop the others
+            error(f"{scan.scan}: {failure}")
+            failed.append(scan)
     if failed:
-        error(f"{len(failed)} of {len(files)} scans failed.")
+        error(f"{len(failed)} of {len(scans)} scans failed.")
         raise SystemExit(1)
     console.print(f"[dim]{CITATION_NOTICE}[/]")
 

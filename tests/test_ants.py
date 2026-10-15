@@ -85,7 +85,7 @@ def test_apptainer_image_is_kept_in_the_cache_folder(monkeypatch, tmp_path):
 
 
 def test_image_file_needs_apptainer():
-    with pytest.raises(ValueError, match="--engine apptainer"):
+    with pytest.raises(ValueError, match="use it without --engine docker"):
         Container("docker", Path("ants.sif"))
     with pytest.raises(ValueError, match="Unknown engine"):
         Container("podman")

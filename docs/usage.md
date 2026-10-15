@@ -7,7 +7,7 @@ Input files must be `.nii` or `.nii.gz`. Outputs are written next to the input f
 | Option | What it does |
 | --- | --- |
 | `-i`, `--input FILE` | The scan to deface. |
-| `--batch FILES` | Several separate scans, each registered and defaced on its own. If ANTs fails on one, or a file is missing, the others still run. Use this or `-i`, not both. |
+| `--batch FILES` | Several separate scans, each registered and defaced on its own. Every file is checked before the first one starts, and any problems are listed together. If ANTs then fails on one scan, the others still run. Use this or `-i`, not both. |
 | `--extra-images FILES` | Other images from the same session and scanner space as `-i`: for example the other MP2RAGE images, or the echoes of a multi-echo GRE (4D files are fine). They get the same deface mask and reorientation as `-i`, but no new face. Use with `-i`, not `--batch`. |
 | `-n`, `--threads N` | How many CPU threads ANTs may use. The default is `ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS` if you have set it, otherwise every core. |
 | `--reorient` / `--no-reorient` | Write the defaced scan and its deface mask in template orientation (the default). With `--no-reorient` you still get the transform files, but no reoriented images. |
