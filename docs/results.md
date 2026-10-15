@@ -2,9 +2,15 @@
 
 pydeface, afni_refacer2, and FaceOff run on the same scan: one 1 mm MPRAGE (256 x 256 x 256 voxels, 16-bit integers) on a 12-core workstation. The images are sagittal sweeps at 5 frames per second, the same as FaceOff's QC page, drawn in the same colours (magma for the scan, turbo for what was put in place of the face). They show the defaced and refaced results only, never the original scan.
 
-Versions: pydeface 2.1.0 (FSL FLIRT), AFNI 26.3.04 with `afni_refacer2` 2.7, and FaceOff 2.0.0 with ANTs 2.6.5.dev1 on the local machine.
+Versions: pydeface 2.1.0 (FSL FLIRT), AFNI 26.3.04 with `afni_refacer2` 2.7, and FaceOff 1.9.5 with ANTs 2.6.5.dev1 on the local machine.
 
-## Defaced
+## FaceOff's outputs
+
+![Sagittal sweep of FaceOff's outputs: defaced, with the eyes removed, refaced, and refaced with the template's eyes](images/faceoff_examples.gif)
+
+From left: the default, `--enucleate`, `--reface`, and `--reface --enucleate`.
+
+## Defaced, compared
 
 ![Sagittal sweep of the defaced scan from pydeface, afni_refacer2, and FaceOff](images/results_deface.gif)
 
@@ -26,7 +32,7 @@ How the rows were measured:
 
 How much of the head each tool removed, compared as overlap (Dice) of the removed head tissue: FaceOff and afni_refacer2 0.62, FaceOff and pydeface 0.44, pydeface and afni_refacer2 0.51.
 
-## Refaced
+## Refaced, compared
 
 ![Sagittal sweep of the refaced scan from afni_refacer2, FaceOff, and FaceOff with the eyes removed and put back; pydeface is a black box marked -N/A-](images/results_reface.gif)
 
