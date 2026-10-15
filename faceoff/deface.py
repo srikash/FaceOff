@@ -3,13 +3,14 @@ put the template's face and eyes back if asked, and reorient."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import nibabel as nib
 
 from . import masking, qc
-from .ants import AntsRunner, Container
+from .ants import Container
 from .registration import Stage, Transforms, register
 from .reorient import Crop, TalReorientation
 from .scratch import Workspace, workspace
@@ -215,17 +216,24 @@ def check_inputs(input_file: Path, options: Options) -> tuple[Path, list[Path]]:
     return subject, extras
 
 
+def register_with_ants(ws: Workspace, subject: Path, options: Options) -> Transforms:
+    """Register the scan to the template with ANTs, run as `options.container` says (your
+    own install if it is on your PATH, otherwise Docker, by default)."""
+    ants = options.container.runner(options.threads, scratch=ws.root)
+    return register(ants, ws, subject, options.template, syn=options.syn, reface=options.refill)
+
+
 def run(
     input_file: Path,
     options: Options,
     reporter: Reporter | None = None,
-    ants: AntsRunner | None = None,
+    registration: Callable[[Workspace, Path, Options], Transforms] = register_with_ants,
 ) -> Outputs:
-    """Deface one scan and write the outputs next to it.
+    """Deface one scan and write the outputs next to it. Returns the names of the files
+    written.
 
-    ANTs runs as `options.container` says (your own install if it is on your PATH, otherwise
-    Docker, by default), unless another way of running
-    it is passed as `ants` (the tests do this). Returns the names of the files written.
+    `registration` registers the scan to the template: ANTs by default. The tests pass a
+    stand-in that moves template images with a known affine.
     """
     template = options.template
     subject, extras = check_inputs(input_file, options)
@@ -234,9 +242,7 @@ def run(
     reporter.begin(subject, options, outputs)
 
     with workspace() as ws:
-        ants = ants or options.container.runner(options.threads, scratch=ws.root)
-
-        tx = register(ants, ws, subject, template, syn=options.syn, reface=options.refill)
+        tx = registration(ws, subject, options)
         reporter.step("registration to the template")
 
         # The template masks mark the region to remove; the deface mask is its inverse.

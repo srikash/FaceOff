@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import nibabel as nib
+import numpy as np
 import pytest
 
 from faceoff.ants import RecordingAnts
@@ -129,3 +131,18 @@ def test_no_syn_step_samples_the_metric():
     _register(ants, True, True)
     syn_metrics = [_after(args, "--metric") for _, args in ants.calls[2:]]
     assert len(syn_metrics) == 3 and not any("Regular" in m for m in syn_metrics)
+
+
+def test_a_4d_image_is_warped_onto_through_a_3d_copy_of_its_grid(tmp_path):
+    """ANTs needs a 3D reference: for several GRE echoes in one file, an empty 3D image on
+    the same grid is used."""
+    echoes = tmp_path / "gre.nii.gz"
+    nib.save(nib.Nifti1Image(np.zeros((6, 5, 4, 3), np.int16), np.diag([2.0, 1, 1, 1])), echoes)
+    ants = RecordingAnts()
+    tx = register(ants, Workspace(tmp_path), SUBJECT, TEMPLATE, syn=False, reface=False)
+    tx.to_subject(TEMPLATE.face_mask, tmp_path / "out.nii.gz", Stage.DEFACE, reference=echoes)
+    args = ants.calls[-1][1]
+    grid = Path(args[args.index("--reference-image") + 1])
+    assert grid.name == "grid_for_out.nii.gz"
+    assert nib.load(grid).shape == (6, 5, 4)
+    assert np.allclose(nib.load(grid).affine, np.diag([2.0, 1, 1, 1]))
