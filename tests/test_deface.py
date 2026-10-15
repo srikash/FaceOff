@@ -197,7 +197,7 @@ def _transforms_for(ants, name):
 
 
 def test_the_eye_mask_uses_the_affine_unless_syn_is_asked_for(tmp_path, template):
-    for syn, expected in ((False, "0GenericAffine.mat"), (True, "syn_InverseComposite.h5")):
+    for syn, expected in ((False, "0GenericAffine.mat"), (True, "brain_2InverseWarp.nii.gz")):
         subject = _save(tmp_path / f"t{syn}.nii.gz", np.full((6, 5, 4), 7, np.int16))
         options = deface.Options(
             threads=1, crop=False, qc=False, enucleate=True, syn=syn, template=template

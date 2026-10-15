@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
+from typing import NamedTuple
 
 import nibabel as nib
 import numpy as np
@@ -22,37 +23,58 @@ from .template import Template
 class Stage(Enum):
     """Which registration to use when bringing a template image onto the scan.
 
-    DEFACE: the affine (or, with --syn, the brain-masked SyN warp). REFACE: also the SyN warp
-    fitted over the face, so the template face matches the scan's face more closely.
+    DEFACE: the affine (or, with --syn, the SyN warp: whole head, then brain-masked). REFACE:
+    also the SyN warp fitted over the face, so the template face matches the scan's face more
+    closely.
     """
 
     DEFACE = "deface"
     REFACE = "reface"
 
 
-# (SyN gradient step/regularisation, convergence, shrink factors, smoothing sigmas)
-_DEFACE_SYN = ("[0.1,3,0]", "[50x25,1e-6,10]", "2x1", "1x0vox")
-# The reface SyN stops at half resolution: the full-resolution level took ~75% of its time
-# for a negligible gain in face fit (correlation 0.857 -> 0.853 on the test scan).
-_REFACE_SYN = ("[0.2,3,0]", "[100x100x70x50,1e-6,10]", "10x6x4x2", "5x3x2x1vox")
+class _SynSchedule(NamedTuple):
+    """The settings for one SyN step. `metric` is filled in with the template and the scan."""
+
+    metric: str
+    step: str  # gradient step and regularisation
+    convergence: str
+    shrink: str
+    smoothing: str
+
+
+_MI = "MI[{fixed},{moving},1,32]"  # dense: every voxel, 32 bins
+_CC = "CC[{fixed},{moving},1,2]"
+# The face SyN stops at half resolution: the full-resolution level took ~75% of its time for
+# a negligible gain in face fit. It uses dense MI: on the test scan it took 34 s against
+# 4 min 35 s for CC, for a face fit (correlation) of 0.843 against 0.863.
+_REFACE_SYN = _SynSchedule(_MI, "[0.2,3,0]", "[100x100x70x50,1e-6,10]", "10x6x4x2", "5x3x2x1vox")
+# --syn: the same MI schedule as the face SyN over the whole head, then CC inside the brain.
+_HEAD_SYN = _REFACE_SYN
+_BRAIN_SYN = _SynSchedule(_CC, "[0.1,3,0]", "[50x25,1e-6,10]", "2x1", "1x0vox")
 
 _AFFINE_PREFIX = "affine_"
-_SYN_PREFIX = "syn_"
+_HEAD_PREFIX = "head_"
+_BRAIN_PREFIX = "brain_"
 _FACE_PREFIX = "face_"
 
 
 class Transforms:
     """The registration of one scan to the template (the files sit in the run's temporary
-    folder)."""
+    folder): the affine, then any nonlinear warps, each with its inverse."""
 
     def __init__(
-        self, ants: AntsRunner, ws: Workspace, subject: Path, syn: bool, reface: bool
+        self,
+        ants: AntsRunner,
+        ws: Workspace,
+        subject: Path,
+        brain_warps: list[Path],
+        face_warp: Path | None,
     ) -> None:
         self._ants = ants
         self._ws = ws
         self._subject = subject
-        self._syn = syn
-        self._reface = reface
+        self._brain_warps = brain_warps  # inverse warps of --syn, in the order they were fitted
+        self._face_warp = face_warp  # inverse warp of the face registration, if it was run
 
     @property
     def affine(self) -> Path:
@@ -73,9 +95,11 @@ class Transforms:
     ) -> None:
         """Move a template image, such as the face mask, onto the scan using this registration.
 
-        The result is on the scan's voxel grid, or on the grid of `reference` if given: any
-        other image in the same scanner space, 3D or 4D (for a 4D image, its 3D grid is
-        used). Use "GenericLabel" interpolation for masks and "Linear" for intensity images.
+        The whole chain of transforms goes to one antsApplyTransforms call, so the image is
+        resampled once. The result is on the scan's voxel grid, or on the grid of `reference`
+        if given: any other image in the same scanner space, 3D or 4D (for a 4D image, its 3D
+        grid is used). Use "GenericLabel" interpolation for masks and "Linear" for intensity
+        images.
         """
         grid = self._subject if reference is None else self._grid_of(reference, output)
         self._ants.run("antsApplyTransforms", [
@@ -100,20 +124,17 @@ class Transforms:
 
     def _inverse_chain(self, stage: Stage) -> list[str]:
         """Return the ANTs `--transform` arguments that take template space to the scan."""
-        # Order matters: inverses of the earlier transforms come first, the inverse of the
-        # last-fitted warp last. The reverse order silently gives wrong output.
-        affine_inverse = ["--transform", f"[{self.affine},1]"]
-        syn_inverse = ["--transform", str(self._ws.path(f"{_SYN_PREFIX}InverseComposite.h5"))]
-        if stage is Stage.DEFACE:
-            return syn_inverse if self._syn else affine_inverse
-        if not self._reface:
-            raise ValueError("No reface registration was run.")
-        # With a --syn warp as the starting point, the face warp is the second warp.
-        if self._syn:
-            warp = self._ws.path(f"{_FACE_PREFIX}2InverseWarp.nii.gz")
-            return [*syn_inverse, "--transform", str(warp)]
-        warp = self._ws.path(f"{_FACE_PREFIX}1InverseWarp.nii.gz")
-        return [*affine_inverse, "--transform", str(warp)]
+        # Order matters: the inverse affine first, then the inverse warps in the order they
+        # were fitted, the last-fitted warp last. The reverse order silently gives wrong output.
+        warps = list(self._brain_warps)
+        if stage is Stage.REFACE:
+            if self._face_warp is None:
+                raise ValueError("No reface registration was run.")
+            warps.append(self._face_warp)
+        chain = ["--transform", f"[{self.affine},1]"]
+        for warp in warps:
+            chain += ["--transform", str(warp)]
+        return chain
 
 
 def register(
@@ -138,23 +159,35 @@ def register(
         "--output", init,
     ])
     ants.run("antsRegistration", _affine_args(subject, init, ws.path(_AFFINE_PREFIX), template))
-    affine = ws.path(f"{_AFFINE_PREFIX}0GenericAffine.mat")
 
-    # SyN stages are separate calls. The deface SyN (--syn) is not required (the affine alone
-    # already gives the deface mask) and is kept for completeness; it starts from the affine
-    # and is guided by the brain mask; the reface SyN starts from that warp (or the affine) and is
-    # fitted over the reface mask.
+    # Each SyN step is its own call, starting from the affine and the warps fitted before it,
+    # and writes its own warp and inverse warp. They are not merged into one file: the steps
+    # end at different resolutions (2 mm and 1 mm warps), which ANTs cannot combine. They are
+    # still applied together, in one antsApplyTransforms call (see Transforms.to_subject).
+    # The deface SyN (--syn) is not required (the affine alone already gives the deface mask)
+    # and is kept for completeness: it fits the whole head with MI, then the brain with CC.
+    # The reface SyN starts from that (or the affine) and is fitted over the reface mask.
+    affine = ws.path(f"{_AFFINE_PREFIX}0GenericAffine.mat")
+    forward: list[Path] = []  # warps fitted so far, scan to template, in fitting order
+    inverse: list[Path] = []
+
+    def fit(prefix: str, mask: Path | None, schedule: _SynSchedule) -> Path:
+        """Run one SyN step and return its inverse warp. ANTs numbers a step's warp after the
+        transforms it starts from (affine = 0)."""
+        start = [*reversed(forward), affine]  # ANTs order: the last-applied transform first
+        args = _syn_args(subject, template, start, mask, ws.path(prefix), schedule)
+        ants.run("antsRegistration", args)
+        number = len(start)
+        forward.append(ws.path(f"{prefix}{number}Warp.nii.gz"))
+        inverse.append(ws.path(f"{prefix}{number}InverseWarp.nii.gz"))
+        return inverse[-1]
+
     if syn:
-        ants.run("antsRegistration", _syn_args(
-            subject, template, affine, template.brain_mask, ws.path(_SYN_PREFIX), _DEFACE_SYN,
-            write_composite=True,
-        ))
-    if reface:
-        start = ws.path(f"{_SYN_PREFIX}Composite.h5") if syn else affine
-        ants.run("antsRegistration", _syn_args(
-            subject, template, start, template.reface_mask, ws.path(_FACE_PREFIX), _REFACE_SYN,
-        ))
-    return Transforms(ants, ws, subject, syn, reface)
+        fit(_HEAD_PREFIX, None, _HEAD_SYN)
+        fit(_BRAIN_PREFIX, template.brain_mask, _BRAIN_SYN)
+    brain_warps = list(inverse)
+    face_warp = fit(_FACE_PREFIX, template.reface_mask, _REFACE_SYN) if reface else None
+    return Transforms(ants, ws, subject, brain_warps, face_warp)
 
 
 def _affine_args(
@@ -183,30 +216,31 @@ def _affine_args(
 def _syn_args(
     subject: Path,
     template: Template,
-    init: Path,
-    mask: Path,
+    start: list[Path],
+    mask: Path | None,
     prefix: Path,
-    schedule: tuple[str, str, str, str],
-    write_composite: bool = False,
+    schedule: _SynSchedule,
 ) -> list[str | Path]:
-    """Return the antsRegistration settings for one SyN step, masked by `mask` and starting
-    from `init` (the affine, or an earlier SyN result)."""
-    step, convergence, shrink, smoothing = schedule
+    """Return the antsRegistration settings for one SyN step, masked by `mask` (or over the
+    whole image if None) and starting from the transforms in `start` (ANTs order: the
+    last-applied transform first)."""
+    initial: list[str | Path] = []
+    for transform in start:
+        initial += ["--initial-moving-transform", transform]
     return [
         "--verbose", "0",
         "--random-seed", "13",
         "--dimensionality", "3",
         "--float", "1",
         "--collapse-output-transforms", "1",
-        "--write-composite-transform", "1" if write_composite else "0",
         "--output", prefix,  # transforms only: no warped images
         "--use-histogram-matching", "0",
         "--winsorize-image-intensities", "[0.005,0.995]",
-        "--masks", f"[{mask},1]",
-        "--initial-moving-transform", init,
-        "--transform", f"SyN{step}",
-        "--metric", f"CC[{template.t1w},{subject},1,2]",
-        "--convergence", convergence,
-        "--shrink-factors", shrink,
-        "--smoothing-sigmas", smoothing,
+        *(["--masks", f"[{mask},1]"] if mask else []),
+        *initial,
+        "--transform", f"SyN{schedule.step}",
+        "--metric", schedule.metric.format(fixed=template.t1w, moving=subject),
+        "--convergence", schedule.convergence,
+        "--shrink-factors", schedule.shrink,
+        "--smoothing-sigmas", schedule.smoothing,
     ]
