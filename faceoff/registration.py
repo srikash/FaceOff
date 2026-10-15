@@ -85,6 +85,15 @@ class Transforms:
         """
         return self._ws.path(f"{_AFFINE_PREFIX}0GenericAffine.mat")
 
+    @property
+    def affine_lps(self) -> np.ndarray:
+        """Return the affine as a 4x4 matrix in LPS world coordinates (mm), mapping template
+        points to scan points: the ITK convention, as in the affine file."""
+        matrix = self._ws.path("affine_matrix.txt")
+        if not matrix.exists():
+            self._ants.run("ConvertTransformFile", ["3", self.affine, matrix, "--hm"])
+        return np.loadtxt(matrix)
+
     def to_subject(
         self,
         template_image: Path,

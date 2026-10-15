@@ -15,8 +15,6 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 
-from .ants import AntsRunner
-from .scratch import Workspace
 from .template import Template
 
 _LPS_FLIP = np.diag([-1.0, -1.0, 1.0, 1.0])
@@ -34,7 +32,8 @@ class Crop:
 
 
 class TalReorientation:
-    """The rotation between a scan and the template, taken from the registration's affine.
+    """The rotation between a scan and the template, taken from the registration's affine
+    (given as numbers, so this module needs no ANTs and no temporary folder).
 
     Scaling and shearing are left out, so applying it never changes the brain's shape.
     """
@@ -59,16 +58,6 @@ class TalReorientation:
         rigid[:3, :3] = rotation
         rigid[:3, 3] = affine_lps[:3, :3] @ centre + affine_lps[:3, 3] - rotation @ centre
         return cls(rigid, template)
-
-    @classmethod
-    def from_ants_affine(
-        cls, ants: AntsRunner, ws: Workspace, affine_mat: Path, template: Template
-    ) -> TalReorientation:
-        """Read the registration's affine file (via ANTs ConvertTransformFile) and take its
-        rotation part."""
-        matrix_file = ws.path("affine_matrix.txt")
-        ants.run("ConvertTransformFile", ["3", affine_mat, matrix_file, "--hm"])
-        return cls.from_affine_matrix(np.loadtxt(matrix_file), template)
 
     def write_transforms(self, source: Path, itk_out: Path, fsl_out: Path) -> None:
         """Save the rotation as an ITK transform (.tfm) and an FSL FLIRT matrix (.mat).

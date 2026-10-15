@@ -4,7 +4,7 @@ import nibabel as nib
 import numpy as np
 
 from conftest import write_template
-from faceoff.reorient import TalReorientation, _itk_to_flirt
+from faceoff.reorient import _LPS_FLIP, TalReorientation, _itk_to_flirt
 from faceoff.template import TEMPLATE_CROP_Z_MM, Template
 
 NOWHERE = Template(Path("/nowhere"))  # for tests that never read template files
@@ -122,3 +122,20 @@ def test_images_on_the_same_grid_get_the_same_crop(tmp_path):
         pairs.append((path, tmp_path / f"{name}_tal.nii.gz"))
     first, second = TalReorientation(np.eye(4), template).write_images(pairs, crop=True)
     assert first == second and (first.first, first.last) == (50, 275)
+
+
+def test_a_scan_tilted_by_a_known_angle_comes_out_square_to_the_template(tmp_path):
+    """A scan acquired 25 degrees nose-down and 10 degrees rolled: its registration affine is
+    that tilt, so in template orientation its voxel axes line up with the template's again,
+    and the voxel size and data stay as they were."""
+    tilt_lps = _rotation(0, 25) @ _rotation(1, 10)  # template to scan, LPS
+    tilt_ras = _LPS_FLIP @ tilt_lps @ _LPS_FLIP
+    voxels = np.diag([0.8, 0.8, 1.2, 1.0])
+    data = np.arange(4 * 5 * 6, dtype=np.int16).reshape(4, 5, 6)
+    source = tmp_path / "tilted.nii.gz"
+    nib.save(nib.Nifti1Image(data, tilt_ras @ voxels), source)
+    tal = TalReorientation.from_affine_matrix(tilt_lps, NOWHERE, np.zeros(3))
+    tal.write_images([(source, tmp_path / "tal.nii.gz")], crop=False)
+    out = nib.load(tmp_path / "tal.nii.gz")
+    np.testing.assert_allclose(out.affine, voxels, atol=1e-6)  # header is stored as float32
+    assert np.array_equal(np.asanyarray(out.dataobj), data)

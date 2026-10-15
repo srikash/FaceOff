@@ -280,7 +280,7 @@ def run(
 
         # The face is already removed. Save the rotation part of the affine; unless switched
         # off, write the images in template orientation (header only, no resampling).
-        tal = TalReorientation.from_ants_affine(ants, ws, tx.affine, template)
+        tal = TalReorientation.from_affine_matrix(tx.affine_lps, template)
         tal.write_transforms(subject, outputs.txn_itk, outputs.txn_fsl)
         if options.reorient:
             input_crop = tal.write_images(outputs.tal_pairs(), options.crop)[0]
