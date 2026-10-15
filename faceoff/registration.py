@@ -248,7 +248,9 @@ def _syn_args(
         "--random-seed", "13",
         "--dimensionality", "3",
         "--float", "1",
-        "--collapse-output-transforms", "1",
+        # Write only this step's warp. With collapsing on, ANTs also rewrites the starting
+        # transforms, and fails when a starting warp is on a coarser grid (the 2 mm head warp).
+        "--collapse-output-transforms", "0",
         "--output", prefix,  # transforms only: no warped images
         "--use-histogram-matching", "0",
         "--winsorize-image-intensities", "[0.005,0.995]",

@@ -155,3 +155,12 @@ def test_the_affine_stage_ignores_any_nonlinear_warps():
 def test_asking_for_a_warp_that_was_not_fitted_is_an_error():
     with pytest.raises(ValueError, match="--syn"):
         _chain(False, True, Stage.NONLINEAR_BRAIN)
+
+
+def test_syn_steps_write_only_their_own_warp():
+    """Collapsing would make ANTs rewrite the starting warps, which fails on the 2 mm head warp."""
+    ants = RecordingAnts()
+    _register(ants, True, True)
+    for args in [args for tool, args in ants.calls if tool == "antsRegistration"][1:]:
+        assert _after(args, "--collapse-output-transforms") == "0"
+        assert "--write-composite-transform" not in args
