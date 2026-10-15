@@ -41,13 +41,13 @@ Outputs go next to the input: `_defaced`, `_defaceMask`, their `_tal_` copies in
 
 ## How it compares
 
-[pydeface](https://github.com/poldracklab/pydeface) 2.1.0, AFNI's `afni_refacer2` (AFNI 26.3.04), and FaceOff on the same 1 mm MPRAGE, on a 12-core workstation:
+FaceOff, [pydeface](https://github.com/poldracklab/pydeface) 2.1.0, and AFNI's `afni_refacer2` (AFNI 26.3.04) on the same 1 mm MPRAGE, on a 12-core workstation:
 
-| | pydeface | afni_refacer2 | FaceOff |
+| | **FaceOff** | pydeface | afni_refacer2 |
 | --- | --- | --- | --- |
-| Deface | 2 min 35 s | 2 min 54 s | 12 s |
-| Reface | not available | 2 min 59 s | 56 s |
-| Remove the eyes | not available | not available | 47 s (`--enucleate`), 59 s with `--reface` |
+| Deface | **12 s** | 2 min 35 s | 2 min 54 s |
+| Reface | **56 s** | not available | 2 min 59 s |
+| Remove the eyes | **47 s** (`--enucleate`)<br>**59 s** with `--reface` | not available | not available |
 
 Each time is the median of 3 runs. FaceOff's include reorienting to template space and writing the QC page, which the other two do not do. [Results](docs/results.md) has the details, with the outputs slice by slice.
 
