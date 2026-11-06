@@ -549,3 +549,51 @@ def test_a_full_disk_while_writing_leaves_the_earlier_outputs_and_no_temporary_f
     outputs = {path.name: path.read_bytes() for path in tmp_path.iterdir() if path.is_file()}
     outputs.pop("uni.nii.gz"), before.pop("uni.nii.gz")
     assert outputs == before  # nothing replaced, no .tmp files
+
+
+def test_ctrl_c_while_writing_leaves_the_earlier_outputs_and_no_temporary_files(
+    tmp_path, template, monkeypatch
+):
+    subject = _save(tmp_path / "uni.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    options = deface.Options(threads=1, crop=False, qc=False, overwrite=True, template=template)
+    deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
+    before = {path.name: path.read_bytes() for path in tmp_path.iterdir() if path.is_file()}
+    subject = _save(tmp_path / "uni.nii.gz", np.full((6, 5, 4), 9, np.int16))
+    real_save, saves = deface.nib.save, []
+
+    def interrupted_save(image, filename):
+        saves.append(filename)
+        if len(saves) == 5:
+            raise KeyboardInterrupt
+        real_save(image, filename)
+
+    monkeypatch.setattr(deface.nib, "save", interrupted_save)
+    with pytest.raises(KeyboardInterrupt):
+        deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
+    outputs = {path.name: path.read_bytes() for path in tmp_path.iterdir() if path.is_file()}
+    outputs.pop("uni.nii.gz"), before.pop("uni.nii.gz")
+    assert outputs == before
+
+
+def test_each_extra_image_is_released_before_the_next_one_is_read(tmp_path, template, monkeypatch):
+    import gc
+    import weakref
+
+    subject = _save(tmp_path / "uni.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    extras = tuple(
+        _save(tmp_path / f"inv{n}.nii.gz", np.full((6, 5, 4), n, np.int16)) for n in "123"
+    )
+    real_deface, made = deface.masking.deface, []
+
+    def watching_deface(image, keep):
+        gc.collect()
+        # made[0] is the main scan, which stays; every extra before this one must be gone
+        assert all(ref() is None for ref in made[1:]), "an earlier extra image is still in memory"
+        result = real_deface(image, keep)
+        made.append(weakref.ref(result))
+        return result
+
+    monkeypatch.setattr(deface.masking, "deface", watching_deface)
+    options = deface.Options(threads=1, crop=False, qc=False, template=template)
+    deface.run(ScanToDeface(subject, extras), options, registration=StandInRegistration())
+    assert len(made) == 4
