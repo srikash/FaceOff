@@ -72,12 +72,15 @@ class DockerAnts:
         self.image = image
 
     def command(self, tool: str, args: Sequence[str | Path]) -> list[str]:
+        # Keep each flag next to its value (the formatter would split them).
+        # fmt: off
         cmd = [
             "docker", "run", "--rm",
             "--init",  # lets Ctrl-C reach ANTs
             "--security-opt", "label=disable",  # SELinux hosts block bind mounts otherwise
             "-e", f"ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS={self.threads}",
         ]
+        # fmt: on
         if hasattr(os, "getuid"):  # outputs owned by the caller, not root
             cmd += ["--user", f"{os.getuid()}:{os.getgid()}"]
         for folder, writable in _mounts(args, self.scratch):
@@ -104,11 +107,14 @@ class ApptainerAnts:
         self.executable = executable
 
     def command(self, tool: str, args: Sequence[str | Path]) -> list[str]:
+        # Keep each flag next to its value (the formatter would split them).
+        # fmt: off
         cmd = [
             self.executable, "exec",
             "--containall",  # no home folder, /tmp, or environment from the host
             "--env", f"ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS={self.threads}",
         ]
+        # fmt: on
         for folder, writable in _mounts(args, self.scratch):
             # --mount, not --bind: scratch paths contain colons
             spec = f"type=bind,source={folder},destination={folder}"
@@ -170,9 +176,7 @@ class Container:
         if self.engine not in ENGINES:
             raise ValueError(f"Unknown engine {self.engine!r}; use docker, apptainer or local.")
         if self.sif is not None and self.engine != "apptainer":
-            raise ValueError(
-                f"--sif is an Apptainer image; use it without --engine {self.engine}."
-            )
+            raise ValueError(f"--sif is an Apptainer image; use it without --engine {self.engine}.")
 
     @property
     def image(self) -> str:
@@ -289,7 +293,8 @@ def _ensure_docker_image(image: str = ANTS_IMAGE) -> None:
     """
     if shutil.which("docker") is None:
         raise RuntimeError(
-            "Docker not found. FaceOff runs ANTs from the Docker image " + image
+            "Docker not found. FaceOff runs ANTs from the Docker image "
+            + image
             + "; on a cluster, try --engine apptainer, or put your own ANTs on your PATH."
         )
     if subprocess.run(["docker", "image", "inspect", image], capture_output=True).returncode == 0:

@@ -144,8 +144,13 @@ def _sweep_gif(panels: list[_Panel]) -> tuple[str, int]:
         frames.append(frame.quantize(colors=COLOURS, dither=Image.Dither.NONE))
     buffer = io.BytesIO()
     frames[0].save(
-        buffer, format="GIF", save_all=True, append_images=frames[1:],
-        duration=1000 // FPS, loop=0, optimize=True,
+        buffer,
+        format="GIF",
+        save_all=True,
+        append_images=frames[1:],
+        duration=1000 // FPS,
+        loop=0,
+        optimize=True,
     )
     return base64.b64encode(buffer.getvalue()).decode(), width * len(panels)
 
@@ -181,7 +186,9 @@ def write_page(
             f'{titles}</div><img alt="Sagittal sweep of {escape(section.name)}" '
             f'src="data:image/gif;base64,{gif}"></div></section>'
         )
-    path.write_text(encoding="utf-8", data=f"""<!doctype html>
+    path.write_text(
+        encoding="utf-8",
+        data=f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FaceOff QC</title>
 <style>
@@ -199,4 +206,5 @@ p {{ color:var(--muted) }}
 <p>Each animation sweeps through the sagittal slices of the head at {FPS} frames per second. Where a refaced image is shown, the part filled from the template is in turbo.</p>
 {"".join(body)}
 </body></html>
-""")
+""",
+    )

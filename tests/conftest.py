@@ -53,8 +53,11 @@ class StandInRegistration:
     `moved` keeps (template file name, stage) for every image moved.
     """
 
-    def __init__(self, template_to_scan: np.ndarray | None = None,
-                 per_stage: dict[Stage, np.ndarray] | None = None) -> None:
+    def __init__(
+        self,
+        template_to_scan: np.ndarray | None = None,
+        per_stage: dict[Stage, np.ndarray] | None = None,
+    ) -> None:
         self.template_to_scan = np.eye(4) if template_to_scan is None else template_to_scan
         self.per_stage = per_stage or {}
         self.moved: list[tuple[str, Stage]] = []
@@ -69,8 +72,9 @@ class StandInRegistration:
     def affine_lps(self) -> np.ndarray:
         return _LPS_FLIP @ self.template_to_scan @ _LPS_FLIP
 
-    def to_subject(self, template_image, output, stage, interpolation="GenericLabel",
-                   reference=None) -> None:
+    def to_subject(
+        self, template_image, output, stage, interpolation="GenericLabel", reference=None
+    ) -> None:
         self.moved.append((Path(template_image).name, stage))
         grid = nib.load(reference or self._subject)
         source = nib.load(template_image)

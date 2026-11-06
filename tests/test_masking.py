@@ -55,7 +55,9 @@ def test_reface_fill_limits_what_is_put_back():
     keep = _img([[[0, 0, 1, 1]]])
     template_ref = _img([[[40, 40, 20, 20]]])
     template_brain = _img([[[0, 0, 1, 1]]])
-    fill = masking.fill_region(_img([[[1, 0, 0, 0]]]), _img([[[0, 1, 0, 0]]]), face=False, eyes=True)
+    fill = masking.fill_region(
+        _img([[[1, 0, 0, 0]]]), _img([[[0, 1, 0, 0]]]), face=False, eyes=True
+    )
     refaced, _ = masking.reface(subject, keep, template_ref, template_brain, fill)
     assert np.asanyarray(refaced.dataobj).ravel().tolist() == [0, 20, 10, 10]
 

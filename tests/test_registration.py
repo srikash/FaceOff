@@ -26,35 +26,47 @@ def _chain(syn: bool, reface: bool, stage: Stage) -> list[str]:
     tool, args = ants.calls[-1]
     assert tool == "antsApplyTransforms"
     assert args[args.index("--reference-image") + 1] == str(SUBJECT)
-    return args[args.index("--verbose") + 2:]
+    return args[args.index("--verbose") + 2 :]
 
 
 def test_deface_affine_only_uses_inverse_affine():
-    assert _chain(False, False, Stage.AFFINE) == ["--transform", "[/WS/affine_0GenericAffine.mat,1]"]
+    assert _chain(False, False, Stage.AFFINE) == [
+        "--transform",
+        "[/WS/affine_0GenericAffine.mat,1]",
+    ]
 
 
 def test_deface_with_syn_chains_affine_head_and_brain_warps():
     assert _chain(True, False, Stage.NONLINEAR_BRAIN) == [
-        "--transform", "[/WS/affine_0GenericAffine.mat,1]",
-        "--transform", "/WS/head_1InverseWarp.nii.gz",
-        "--transform", "/WS/brain_2InverseWarp.nii.gz",
+        "--transform",
+        "[/WS/affine_0GenericAffine.mat,1]",
+        "--transform",
+        "/WS/head_1InverseWarp.nii.gz",
+        "--transform",
+        "/WS/brain_2InverseWarp.nii.gz",
     ]
 
 
 def test_reface_inverse_affine_comes_before_inverse_warp():
     """antsApplyTransforms: earlier transforms' inverses first, last-fitted warp last."""
     assert _chain(False, True, Stage.NONLINEAR_FACE) == [
-        "--transform", "[/WS/affine_0GenericAffine.mat,1]",
-        "--transform", "/WS/face_1InverseWarp.nii.gz",
+        "--transform",
+        "[/WS/affine_0GenericAffine.mat,1]",
+        "--transform",
+        "/WS/face_1InverseWarp.nii.gz",
     ]
 
 
 def test_reface_after_syn_is_third_warp():
     assert _chain(True, True, Stage.NONLINEAR_FACE) == [
-        "--transform", "[/WS/affine_0GenericAffine.mat,1]",
-        "--transform", "/WS/head_1InverseWarp.nii.gz",
-        "--transform", "/WS/brain_2InverseWarp.nii.gz",
-        "--transform", "/WS/face_3InverseWarp.nii.gz",
+        "--transform",
+        "[/WS/affine_0GenericAffine.mat,1]",
+        "--transform",
+        "/WS/head_1InverseWarp.nii.gz",
+        "--transform",
+        "/WS/brain_2InverseWarp.nii.gz",
+        "--transform",
+        "/WS/face_3InverseWarp.nii.gz",
     ]
 
 
@@ -78,8 +90,11 @@ def test_each_syn_step_starts_from_the_transforms_fitted_before_it():
     """ANTs order: the last-applied transform first, the affine last."""
     ants = RecordingAnts()
     _register(ants, True, True)
-    starts = [[str(a) for i, a in enumerate(args) if args[i - 1] == "--initial-moving-transform"]
-              for tool, args in ants.calls if tool == "antsRegistration"][1:]
+    starts = [
+        [str(a) for i, a in enumerate(args) if args[i - 1] == "--initial-moving-transform"]
+        for tool, args in ants.calls
+        if tool == "antsRegistration"
+    ][1:]
     assert starts == [
         ["/WS/affine_0GenericAffine.mat"],
         ["/WS/head_1Warp.nii.gz", "/WS/affine_0GenericAffine.mat"],
@@ -119,9 +134,13 @@ def test_syn_fits_the_whole_head_with_mi_then_the_brain_with_cc():
     ]
 
 
-@pytest.mark.parametrize(("syn", "start"), [
-    (False, "/WS/affine_0GenericAffine.mat"), (True, "/WS/brain_2Warp.nii.gz"),
-])
+@pytest.mark.parametrize(
+    ("syn", "start"),
+    [
+        (False, "/WS/affine_0GenericAffine.mat"),
+        (True, "/WS/brain_2Warp.nii.gz"),
+    ],
+)
 def test_reface_fits_the_face_with_dense_mi(syn, start):
     assert _syn_calls(syn, True)[-1] == (start, f"[{TEMPLATE.reface_mask},1]", MI, "10x6x4x2")
 

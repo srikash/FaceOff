@@ -38,9 +38,7 @@ def strip_extension(path: Path) -> Path:
     raise InputError(f"Unsupported extension: {path.name}. Must be .nii or .nii.gz")
 
 
-def scans_to_deface(
-    scans: Sequence[Path], extra_images: Sequence[Path] = ()
-) -> list[ScanToDeface]:
+def scans_to_deface(scans: Sequence[Path], extra_images: Sequence[Path] = ()) -> list[ScanToDeface]:
     """Check the scans (one with -i, several with --batch) and the extra images that go with
     a single scan, and return them with full paths.
 

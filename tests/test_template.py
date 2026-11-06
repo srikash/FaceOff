@@ -10,7 +10,8 @@ from faceoff import template, template_files
 def fake_files(monkeypatch):
     payloads = {name: f"content of {name}".encode() for name in template_files.TEMPLATE_FILES}
     monkeypatch.setattr(
-        template_files, "TEMPLATE_FILES",
+        template_files,
+        "TEMPLATE_FILES",
         {name: hashlib.md5(data).hexdigest() for name, data in payloads.items()},
     )
     return payloads
@@ -20,6 +21,7 @@ def _downloader(payloads, calls):
     def download(url: str, dest: Path) -> None:
         calls.append(url)
         dest.write_bytes(payloads[url.split("/files/")[1].split("/content")[0]])
+
     return download
 
 
@@ -84,7 +86,9 @@ def test_concurrent_downloads_do_not_share_partial_files(tmp_path, monkeypatch):
     from threading import Barrier
 
     payload = b"template"
-    monkeypatch.setattr(template_files, "TEMPLATE_FILES", {"test.nii.gz": hashlib.md5(payload).hexdigest()})
+    monkeypatch.setattr(
+        template_files, "TEMPLATE_FILES", {"test.nii.gz": hashlib.md5(payload).hexdigest()}
+    )
     barrier = Barrier(2)
 
     def download(url, dest):

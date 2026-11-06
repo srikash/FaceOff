@@ -115,6 +115,8 @@ class Transforms:
         images.
         """
         grid = self._subject if reference is None else self._grid_of(reference, output)
+        # Keep each flag next to its value (the formatter would split them).
+        # fmt: off
         self._ants.run("antsApplyTransforms", [
             "--dimensionality", "3",
             "--interpolation", interpolation,
@@ -124,6 +126,7 @@ class Transforms:
             "--verbose", "0",
             *self._inverse_chain(stage),
         ])
+        # fmt: on
 
     def _grid_of(self, image: Path, output: Path) -> Path:
         """Return `image` itself if it is 3D; for a 4D image (such as several GRE echoes),
@@ -168,6 +171,8 @@ def register(
     Returns the result, ready to move template images onto the scan.
     """
     init = ws.path("init.mat")
+    # Keep each flag next to its value (the formatter would split them).
+    # fmt: off
     ants.run("antsAI", [
         "--dimensionality", "3",
         "--random-seed", _SEED,
@@ -176,6 +181,7 @@ def register(
         "--metric", f"MI[{template.t1w},{subject},32,Regular,0.25]",
         "--output", init,
     ])
+    # fmt: on
     ants.run("antsRegistration", _affine_args(subject, init, ws.path(_AFFINE_PREFIX), template))
 
     # Each SyN step is its own call, starting from the affine and the warps fitted before it,
@@ -211,6 +217,8 @@ def register(
 def _common_args(prefix: Path, *, collapse: bool) -> list[str | Path]:
     """Return the antsRegistration settings every step shares. Only transforms are written (no
     warped images)."""
+    # Keep each flag next to its value (the formatter would split them).
+    # fmt: off
     return [
         "--verbose", "0",
         "--random-seed", _SEED,
@@ -221,22 +229,31 @@ def _common_args(prefix: Path, *, collapse: bool) -> list[str | Path]:
         "--use-histogram-matching", "0",
         "--winsorize-image-intensities", "[0.005,0.995]",
     ]
+    # fmt: on
 
 
-def _affine_args(
-    subject: Path, init: Path, prefix: Path, template: Template
-) -> list[str | Path]:
+def _affine_args(subject: Path, init: Path, prefix: Path, template: Template) -> list[str | Path]:
     """Return the antsRegistration settings for the rigid and affine steps (brain-masked)."""
     brain_mask = f"[{template.brain_mask},1]"
     mi = f"MI[{template.t1w},{subject},1,32,Regular,0.25]"
-    stage = ["--metric", mi, "--convergence", "[1000x500x250x100,1e-6,10]",
-             "--shrink-factors", "12x8x4x2", "--smoothing-sigmas", "4x3x2x1vox"]
+    # Keep each flag next to its value (the formatter would split them).
+    # fmt: off
+    stage = [
+        "--metric", mi,
+        "--convergence", "[1000x500x250x100,1e-6,10]",
+        "--shrink-factors", "12x8x4x2",
+        "--smoothing-sigmas", "4x3x2x1vox",
+    ]
+    # fmt: on
+    # Keep each flag next to its value (the formatter would split them).
+    # fmt: off
     return [
         *_common_args(prefix, collapse=True),
         "--initial-moving-transform", init,
         "--masks", brain_mask, "--transform", "Rigid[0.1]", *stage,
         "--masks", brain_mask, "--transform", "Affine[0.1]", *stage,
     ]
+    # fmt: on
 
 
 def _syn_args(
@@ -253,6 +270,8 @@ def _syn_args(
     initial: list[str | Path] = []
     for transform in start:
         initial += ["--initial-moving-transform", transform]
+    # Keep each flag next to its value (the formatter would split them).
+    # fmt: off
     return [
         # Collapsing off writes only this step's warp. With it on, ANTs also rewrites the
         # starting transforms, and fails when a starting warp is on a coarser grid (the 2 mm
@@ -266,3 +285,4 @@ def _syn_args(
         "--shrink-factors", schedule.shrink,
         "--smoothing-sigmas", schedule.smoothing,
     ]
+    # fmt: on

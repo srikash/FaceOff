@@ -49,7 +49,11 @@ def test_flags_reach_the_defacing(tmp_path, runs):
     [(name, options, extras)] = runs
     assert name == "a.nii.gz"
     assert (options.threads, options.reface, options.crop, options.reorient, options.syn) == (
-        3, True, False, True, False,
+        3,
+        True,
+        False,
+        True,
+        False,
     )
 
 
@@ -162,17 +166,33 @@ def test_engine_flag_beats_the_ants_on_the_path(tmp_path, runs, monkeypatch):
 
 
 def test_sif_is_refused_with_local(tmp_path, runs):
-    result = CliRunner().invoke(cli_module.cli, [
-        "-i", _scan(tmp_path, "a.nii.gz"), "--engine", "local", "--sif", _scan(tmp_path, "x.sif"),
-    ])
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "-i",
+            _scan(tmp_path, "a.nii.gz"),
+            "--engine",
+            "local",
+            "--sif",
+            _scan(tmp_path, "x.sif"),
+        ],
+    )
     assert result.exit_code == 2
     assert "--engine local" in result.output
 
 
 def test_sif_is_refused_with_docker(tmp_path, runs):
-    result = CliRunner().invoke(cli_module.cli, [
-        "-i", _scan(tmp_path, "a.nii.gz"), "--engine", "docker", "--sif", _scan(tmp_path, "x.sif"),
-    ])
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "-i",
+            _scan(tmp_path, "a.nii.gz"),
+            "--engine",
+            "docker",
+            "--sif",
+            _scan(tmp_path, "x.sif"),
+        ],
+    )
     assert result.exit_code == 2
     assert runs == []
 

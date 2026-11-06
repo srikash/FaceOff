@@ -52,7 +52,15 @@ rich_click_config.OPTION_GROUPS = {
         },
         {
             "name": "Outputs",
-            "options": ["--reorient", "--crop", "--reface", "--enucleate", "--renucleate", "--qc", "--overwrite"],
+            "options": [
+                "--reorient",
+                "--crop",
+                "--reface",
+                "--enucleate",
+                "--renucleate",
+                "--qc",
+                "--overwrite",
+            ],
             "title_style": "bold",
         },
         {"name": "How ANTs runs", "options": ["--engine", "--sif"], "title_style": "bold"},
@@ -80,6 +88,7 @@ class FaceOffCommand(RichCommand):
 
     def format_epilog(self, context: Any, formatter: Any) -> None:
         """Draw the usage guide (example commands in yellow boxes) below the options."""
+
         def panel(title: str, body: str) -> Padding:
             return Padding(
                 Panel(
@@ -133,9 +142,9 @@ class FaceOffCommand(RichCommand):
                 "example in a loop:\n"
                 "[bold white]for[/] uni [bold white]in[/] [green]sub-*_UNIT1.nii.gz[/]; "
                 "[bold white]do[/]\n"
-                "  [bold white]faceoff[/] [bold cyan]-i[/] [green]\"$uni\"[/] "
+                '  [bold white]faceoff[/] [bold cyan]-i[/] [green]"$uni"[/] '
                 "[bold cyan]--extra-images[/] "
-                "[green]\"${uni%_UNIT1.nii.gz}\"_inv-*_MP2RAGE.nii.gz[/]\n"
+                '[green]"${uni%_UNIT1.nii.gz}"_inv-*_MP2RAGE.nii.gz[/]\n'
                 "[bold white]done[/]",
             ),
             panel(
@@ -175,23 +184,32 @@ def _extra_images_or_batch() -> Padding:
     table.add_column(f"[bold {_ONE_SCAN}]A: -i with --extra-images[/]", ratio=1)
     table.add_column(f"[bold {_BATCH}]B: --batch[/]", ratio=1)
     for row in (
-        ("For", "Other images from the same session as -i: MP2RAGE INV1, INV2, and UNI, or "
-         "GRE echoes (4D is fine)", "Separate scans, such as one T1w for each subject"),
+        (
+            "For",
+            "Other images from the same session as -i: MP2RAGE INV1, INV2, and UNI, or "
+            "GRE echoes (4D is fine)",
+            "Separate scans, such as one T1w for each subject",
+        ),
         ("Registered", "Once, on the -i scan", "Once for every scan"),
         ("Deface mask", "The same mask for every image", "Each scan gets its own"),
         ("With --reface", "Only the -i scan is refaced", "Every scan is refaced"),
         ("If one fails", "The whole run stops", "The other scans still run"),
-        ("Example",
-         "[bold white]faceoff[/] [bold cyan]-i[/] [green]sub-01_UNIT1.nii.gz[/] "
-         "[bold cyan]--extra-images[/] [green]sub-01_inv-*_MP2RAGE.nii.gz[/]",
-         "[bold white]faceoff[/] [bold cyan]--batch[/] [green]sub-*_T1w.nii.gz[/]"),
+        (
+            "Example",
+            "[bold white]faceoff[/] [bold cyan]-i[/] [green]sub-01_UNIT1.nii.gz[/] "
+            "[bold cyan]--extra-images[/] [green]sub-01_inv-*_MP2RAGE.nii.gz[/]",
+            "[bold white]faceoff[/] [bold cyan]--batch[/] [green]sub-*_T1w.nii.gz[/]",
+        ),
     ):
         table.add_row(*(Text.from_markup(cell) for cell in row))
     return Padding(
-        Group(table, Text.from_markup(
-            "[dim]Both take file names separated by commas, spaces, or both. They cannot be "
-            "used together.[/]"
-        )),
+        Group(
+            table,
+            Text.from_markup(
+                "[dim]Both take file names separated by commas, spaces, or both. They cannot be "
+                "used together.[/]"
+            ),
+        ),
         (1, 0, 0, 0),
     )
 
@@ -235,75 +253,99 @@ def _deface_with_timer(scan: ScanToDeface, options: deface.Options) -> None:
     context_settings={"help_option_names": ["-h", "--help"], "allow_extra_args": True},
 )
 @click.option(
-    "-i", "--input", "input_file",
+    "-i",
+    "--input",
+    "input_file",
     type=click.Path(path_type=Path, exists=True, dir_okay=False),
     help="The scan to deface (.nii or .nii.gz).",
 )
 @click.option(
-    "--batch", metavar="FILES",
+    "--batch",
+    metavar="FILES",
     help="Several separate scans (commas or spaces between names), each registered and "
     "defaced on its own. Every file is checked before the first one starts; if ANTs then fails "
     "on one, the others still run.",
 )
 @click.option(
-    "--extra-images", multiple=True, metavar="FILES",
+    "--extra-images",
+    multiple=True,
+    metavar="FILES",
     help="Other images from the same session as -i (commas or spaces between names), for "
     "example MP2RAGE INV1, INV2, and UNI, or GRE echoes (4D is fine). They reuse the -i scan's "
     "registration, so they get its deface mask and reorientation; they are not refaced.",
 )
 @click.option(
-    "--reorient/--no-reorient", default=True, show_default=True,
+    "--reorient/--no-reorient",
+    default=True,
+    show_default=True,
     help="Also write the defaced scan and its deface mask in template orientation (only the "
     "header changes, nothing is resampled). The ITK and FSL transforms are saved either way.",
 )
 @click.option(
-    "--crop/--no-crop", default=True, show_default=True,
+    "--crop/--no-crop",
+    default=True,
+    show_default=True,
     help=f"Trim the reoriented outputs to z {TEMPLATE_CROP_Z_MM[0]:g} to "
     f"{TEMPLATE_CROP_Z_MM[1]:g} mm in template space. Whole slices are dropped; nothing is "
     "resampled.",
 )
 @click.option(
-    "--reface", is_flag=True,
+    "--reface",
+    is_flag=True,
     help="Also write a refaced scan, with the template's face in place of the removed one. "
     "Add --renucleate to put the template's eyes back too.",
 )
 @click.option(
-    "--enucleate", is_flag=True,
+    "--enucleate",
+    is_flag=True,
     help="Also remove the eyes, using the template's eye mask, moved onto the scan with a "
     "nonlinear registration over the face. With --reface, the template's eyes are put back "
     "too, as with --renucleate.",
 )
 @click.option(
-    "--renucleate", is_flag=True,
+    "--renucleate",
+    is_flag=True,
     help="Also put the template's eyes in place of the removed ones, as --reface does for the "
     "face. Implies --enucleate and writes the refaced files. Redundant with --reface "
     "--enucleate, which does the same.",
 )
 @click.option(
-    "--qc/--no-qc", default=True, show_default=True,
+    "--qc/--no-qc",
+    default=True,
+    show_default=True,
     help="Write a QC page (scan_faceoff_qc.html): a GIF sweeping through the sagittal slices of "
     "the defaced scan, and of the refaced scan when one is written, for each image.",
 )
 @click.option(
-    "-n", "--threads", type=int, default=None, metavar="N", callback=_at_least_one,
+    "-n",
+    "--threads",
+    type=int,
+    default=None,
+    metavar="N",
+    callback=_at_least_one,
     help="How many CPU threads ANTs may use. Default: ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS if "
     "set, otherwise every core.",
 )
 @click.option(
-    "--syn", is_flag=True,
+    "--syn",
+    is_flag=True,
     help="Not required; included for completeness. Adds a slower nonlinear registration "
     "(whole head, then brain) and moves the face mask with it. The default affine "
     "registration already gives almost the same mask. The eyes always use the nonlinear "
     "registration over the face.",
 )
 @click.option(
-    "--engine", type=click.Choice(ENGINES), default=None,
+    "--engine",
+    type=click.Choice(ENGINES),
+    default=None,
     help="Where ANTs runs: local (your own install), docker, or apptainer. Apptainer falls "
     "back to the singularity command if that is what your system has. Default: apptainer with "
     "--sif; your own install if its tools are on your PATH; otherwise docker.",
 )
 @click.option(
-    "--sif", type=click.Path(path_type=Path, exists=True, dir_okay=False), metavar="FILE",
+    "--sif",
+    type=click.Path(path_type=Path, exists=True, dir_okay=False),
+    metavar="FILE",
     help="An Apptainer image file of ANTs to use, for example from apptainer pull. Implies "
     "--engine apptainer.",
 )
@@ -351,9 +393,18 @@ def cli(
         if not scans:
             raise ValueError("Give at least one scan.")
         threads = ants_threads(threads)
-        options = deface.Options(threads=threads, syn=syn, reorient=reorient, crop=crop,
-                                 reface=reface, enucleate=enucleate, renucleate=renucleate,
-                                 qc=qc, container=container, overwrite=overwrite)
+        options = deface.Options(
+            threads=threads,
+            syn=syn,
+            reorient=reorient,
+            crop=crop,
+            reface=reface,
+            enucleate=enucleate,
+            renucleate=renucleate,
+            qc=qc,
+            container=container,
+            overwrite=overwrite,
+        )
         deface.check_outputs(scans, options)
     except ValueError as problem:  # InputError, or a container choice that does not fit
         raise click.UsageError(str(problem)) from problem

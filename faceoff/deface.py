@@ -118,13 +118,20 @@ class Outputs:
 def check_outputs(scans: list[ScanToDeface], options: Options) -> None:
     """Reject conflicting outputs before processing any scan."""
     inputs = {path.resolve() for scan in scans for path in (scan.scan, *scan.extra_images)}
-    outputs = [path for scan in scans for path in
-               Outputs.for_input(scan.scan, list(scan.extra_images), options).written()]
+    outputs = [
+        path
+        for scan in scans
+        for path in Outputs.for_input(scan.scan, list(scan.extra_images), options).written()
+    ]
     resolved = [path.resolve() for path in outputs]
     input_ids = {(path.stat().st_dev, path.stat().st_ino) for path in inputs if path.exists()}
     output_ids = [(path.stat().st_dev, path.stat().st_ino) for path in outputs if path.exists()]
-    if (inputs.intersection(resolved) or len(set(resolved)) != len(resolved)
-            or input_ids.intersection(output_ids) or len(set(output_ids)) != len(output_ids)):
+    if (
+        inputs.intersection(resolved)
+        or len(set(resolved)) != len(resolved)
+        or input_ids.intersection(output_ids)
+        or len(set(output_ids)) != len(output_ids)
+    ):
         raise ValueError("Output paths conflict with inputs or other outputs.")
     existing = [str(path) for path in outputs if path.exists() or path.is_symlink()]
     if existing and not options.overwrite:
@@ -273,7 +280,11 @@ def run(
         if outputs.qc:
             try:
                 qc.write_page(
-                    outputs.qc, subject.name, defaced, refaced, fill,
+                    outputs.qc,
+                    subject.name,
+                    defaced,
+                    refaced,
+                    fill,
                     [(name, nib.load(path)) for name, path in qc_extras],
                 )
                 reporter.step("QC page")

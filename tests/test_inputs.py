@@ -47,10 +47,13 @@ def test_strip_extension():
         strip_extension(Path("scan.mgz"))
 
 
-@pytest.mark.parametrize(("given", "environment", "expected"), [
-    (4, {"ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS": "8"}, 4),  # --threads wins
-    (None, {"ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS": "8"}, 8),
-])
+@pytest.mark.parametrize(
+    ("given", "environment", "expected"),
+    [
+        (4, {"ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS": "8"}, 4),  # --threads wins
+        (None, {"ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS": "8"}, 8),
+    ],
+)
 def test_thread_count(given, environment, expected):
     assert ants_threads(given, environment) == expected
 

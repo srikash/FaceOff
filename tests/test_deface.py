@@ -61,8 +61,10 @@ def test_extra_images_and_tal_mask(tmp_path, template):
     # inv1 has 2 mm voxels along x: only its first slice (x = 0 mm) is inside the face.
     assert inv1.shape == (3, 5, 4) and (inv1[:1] == 0).all() and (inv1[1:] == 5).all()
     assert gre.shape == (6, 5, 4, 3) and (gre[:2] == 0).all() and (gre[2:] == 9).all()
-    assert [p.name for p in outputs.extra_tal_defaced] == ["inv1_tal_defaced.nii.gz",
-                                                           "gre_tal_defaced.nii.gz"]
+    assert [p.name for p in outputs.extra_tal_defaced] == [
+        "inv1_tal_defaced.nii.gz",
+        "gre_tal_defaced.nii.gz",
+    ]
 
 
 def test_the_face_is_removed_where_the_registration_puts_it(tmp_path, template):
@@ -79,9 +81,15 @@ def test_the_face_is_removed_where_the_registration_puts_it(tmp_path, template):
 
 def test_enucleate_removes_the_eyes_too(tmp_path, template):
     subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
-    plain = deface.run(ScanToDeface(subject), deface.Options(threads=1, crop=False, template=template), registration=StandInRegistration())
+    plain = deface.run(
+        ScanToDeface(subject),
+        deface.Options(threads=1, crop=False, template=template),
+        registration=StandInRegistration(),
+    )
     assert (np.asanyarray(nib.load(plain.defaced).dataobj)[2] == 7).all()
-    options = deface.Options(threads=1, crop=False, enucleate=True, template=template, overwrite=True)
+    options = deface.Options(
+        threads=1, crop=False, enucleate=True, template=template, overwrite=True
+    )
     outputs = deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
     defaced = np.asanyarray(nib.load(outputs.defaced).dataobj)
     assert (defaced[:3] == 0).all() and (defaced[3:] == 7).all()
@@ -102,7 +110,11 @@ def test_renucleate_puts_back_only_the_eyes(tmp_path, template):
 def test_reface_with_renucleate_puts_back_face_and_eyes(tmp_path, template):
     subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
     options = deface.Options(threads=1, crop=False, reface=True, renucleate=True, template=template)
-    refaced = np.asanyarray(nib.load(deface.run(ScanToDeface(subject), options, registration=StandInRegistration()).refaced).dataobj)
+    refaced = np.asanyarray(
+        nib.load(
+            deface.run(ScanToDeface(subject), options, registration=StandInRegistration()).refaced
+        ).dataobj
+    )
     np.testing.assert_allclose(refaced[:2], 17.5)  # template face
     np.testing.assert_allclose(refaced[2:], 7)
 
@@ -124,9 +136,12 @@ def test_qc_page_adds_refaced_with_reface_or_renucleate_and_a_gif_per_extra(tmp_
     subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
     extra = _save(tmp_path / "inv1.nii.gz", np.full((6, 5, 4), 5, np.int16))
     for flags in ({"reface": True}, {"renucleate": True}):
-        options = deface.Options(threads=1, crop=False, qc=True, template=template, overwrite=True, **flags)
-        outputs = deface.run(ScanToDeface(subject, (extra,)), options,
-                             registration=StandInRegistration())
+        options = deface.Options(
+            threads=1, crop=False, qc=True, template=template, overwrite=True, **flags
+        )
+        outputs = deface.run(
+            ScanToDeface(subject, (extra,)), options, registration=StandInRegistration()
+        )
         assert _titles(outputs.qc) == (["defaced", "refaced", "defaced"], 2)
 
 
@@ -164,16 +179,21 @@ class RecordingReporter(deface.Reporter):
         self.crops.append(crop)
 
 
-@pytest.mark.parametrize(("syn", "face_stage"), [
-    (False, Stage.AFFINE), (True, Stage.NONLINEAR_BRAIN),
-])
+@pytest.mark.parametrize(
+    ("syn", "face_stage"),
+    [
+        (False, Stage.AFFINE),
+        (True, Stage.NONLINEAR_BRAIN),
+    ],
+)
 def test_the_eyes_always_use_the_face_registration(tmp_path, template, syn, face_stage):
     """The face mask goes with the affine (or --syn's brain registration); the eye mask, for
     the scan and for each extra image, with the nonlinear face registration."""
     subject = _save(tmp_path / "t.nii.gz", np.full((6, 5, 4), 7, np.int16))
     extra = _save(tmp_path / "inv1.nii.gz", np.full((6, 5, 4), 5, np.int16))
-    options = deface.Options(threads=1, crop=False, qc=False, enucleate=True, syn=syn,
-                             template=template)
+    options = deface.Options(
+        threads=1, crop=False, qc=False, enucleate=True, syn=syn, template=template
+    )
     registration = StandInRegistration()
     deface.run(ScanToDeface(subject, (extra,)), options, registration=registration)
     stages = {(name.split("desc-")[1], stage) for name, stage in registration.moved}
@@ -200,14 +220,20 @@ def test_the_eye_hole_and_the_template_eyes_come_from_the_same_registration(tmp_
 
 def test_reface_with_enucleate_puts_the_eyes_back_like_renucleate(tmp_path, template):
     results = []
-    for name, flags in (("a", {"reface": True, "enucleate": True}),
-                        ("b", {"reface": True, "renucleate": True}),
-                        ("c", {"reface": True, "enucleate": True, "renucleate": True})):
+    for name, flags in (
+        ("a", {"reface": True, "enucleate": True}),
+        ("b", {"reface": True, "renucleate": True}),
+        ("c", {"reface": True, "enucleate": True, "renucleate": True}),
+    ):
         scan = _save(tmp_path / f"{name}.nii.gz", np.full((6, 5, 4), 7, np.int16))
         options = deface.Options(threads=1, crop=False, qc=False, template=template, **flags)
         outputs = deface.run(ScanToDeface(scan), options, registration=StandInRegistration())
-        results.append((np.asanyarray(nib.load(outputs.defaced).dataobj),
-                        np.asanyarray(nib.load(outputs.refaced).dataobj)))
+        results.append(
+            (
+                np.asanyarray(nib.load(outputs.defaced).dataobj),
+                np.asanyarray(nib.load(outputs.refaced).dataobj),
+            )
+        )
     defaced, refaced = results[0]
     assert (defaced[:3] == 0).all()  # the face and the eyes are removed ...
     np.testing.assert_allclose(refaced[:2], 17.5)  # ... the template face goes back ...
@@ -245,7 +271,12 @@ def test_crop_is_reported_once_and_applied_to_the_tal_outputs(tmp_path, template
     subject = _save(tmp_path / "t1w.nii.gz", np.full((6, 5, 400), 7, np.int16), origin)
     reporter = RecordingReporter()
 
-    outputs = deface.run(ScanToDeface(subject), deface.Options(threads=1, template=template), reporter, StandInRegistration())
+    outputs = deface.run(
+        ScanToDeface(subject),
+        deface.Options(threads=1, template=template),
+        reporter,
+        StandInRegistration(),
+    )
 
     assert reporter.crops == [Crop(axis=2, first=50, last=275, size=400)]
     for path in (outputs.tal_defaced, outputs.tal_deface_mask):
@@ -268,8 +299,11 @@ def test_empty_primary_mask_stops_before_writing(tmp_path, template):
     subject = _save(tmp_path / "t1.nii.gz", np.ones((6, 5, 4), np.int16))
     nib.save(nib.Nifti1Image(np.zeros((8, 8, 8), np.uint8), np.eye(4)), template.face_mask)
     with pytest.raises(ValueError, match="face mask is empty"):
-        deface.run(ScanToDeface(subject), deface.Options(threads=1, template=template),
-                   registration=StandInRegistration())
+        deface.run(
+            ScanToDeface(subject),
+            deface.Options(threads=1, template=template),
+            registration=StandInRegistration(),
+        )
     assert not (tmp_path / "t1_defaced.nii.gz").exists()
 
 

@@ -53,12 +53,16 @@ def test_fsl_matrix_matches_c3d_on_a_rotated_non_1mm_grid(tmp_path):
     rigid = _rotation(2, 20)
     rigid[:3, 3] = [3, -2, 4]
 
-    TalReorientation(rigid, template).write_transforms(source, tmp_path / "x.tfm", tmp_path / "x.mat")
+    TalReorientation(rigid, template).write_transforms(
+        source, tmp_path / "x.tfm", tmp_path / "x.mat"
+    )
 
-    c3d = [[0.939693, -0.309976, 0.144544, 29.4913],
-           [0.34202, 0.851651, -0.397131, -7.33693],
-           [0.0, 0.422618, 0.906308, 18.0],
-           [0.0, 0.0, 0.0, 1.0]]
+    c3d = [
+        [0.939693, -0.309976, 0.144544, 29.4913],
+        [0.34202, 0.851651, -0.397131, -7.33693],
+        [0.0, 0.422618, 0.906308, 18.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
     np.testing.assert_allclose(np.loadtxt(tmp_path / "x.mat"), c3d, atol=1e-4)
 
 
@@ -104,11 +108,9 @@ def test_crop_on_an_oblique_scan_keeps_only_slices_inside_the_template_range(tmp
     kept = [k for k, z in enumerate(centre_z) if low <= z < high]
     assert (crop.first, crop.last) == (kept[0], kept[-1] + 1)
     out = nib.load(target)
-    assert np.array_equal(np.asanyarray(out.dataobj), data[:, :, crop.first:crop.last])
+    assert np.array_equal(np.asanyarray(out.dataobj), data[:, :, crop.first : crop.last])
     # Voxel (i, j, 0) of the cropped image is where voxel (i, j, first) was.
-    np.testing.assert_allclose(
-        out.affine @ [3, 4, 0, 1], affine @ [3, 4, crop.first, 1], atol=1e-9
-    )
+    np.testing.assert_allclose(out.affine @ [3, 4, 0, 1], affine @ [3, 4, crop.first, 1], atol=1e-9)
 
 
 def test_images_on_the_same_grid_get_the_same_crop(tmp_path):
