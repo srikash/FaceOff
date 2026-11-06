@@ -2,6 +2,12 @@
 
 If you use FaceOff, please cite FaceOff, the MNI ICBM152 template, and ANTs. Each reference below has an APA 7 line and a BibTeX entry to copy. Details were checked against the publishers' records (PubMed, Crossref, Zenodo) on 2026-11-06.
 
+## Text for your methods section
+
+> Scans were defaced with FaceOff (version 1.9.7; Kashyap, 2026), which registers each scan to a modified MNI ICBM152 template (Fonov et al., 2009, 2011) using the ANTs registration tools (Avants et al., 2011; Tustison et al., 2021).
+
+Change the version number to the one you used, and list the references below in your bibliography.
+
 You can also cite FaceOff from the `CITATION.cff` file in this repository, or from the Zenodo badge at the top of the README.
 
 ## FaceOff
