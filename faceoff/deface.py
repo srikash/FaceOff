@@ -197,6 +197,21 @@ def _left_over(subject: Path, extras: list[Path], options: Options, outputs: Out
     return [p for p in possible if p not in written and (p.exists() or p.is_symlink())]
 
 
+def _grid_key(image: nib.Nifti1Image) -> tuple:
+    """Return what makes two images share one voxel grid for ANTs: the first three sizes and
+    voxel sizes, and both header affines with their codes (ITK may read either one)."""
+    header = image.header
+    (qform, qcode), (sform, scode) = header.get_qform(coded=True), header.get_sform(coded=True)
+    return (
+        image.shape[:3],
+        tuple(header.get_zooms()[:3]),
+        None if qform is None else qform.tobytes(),
+        qcode,
+        None if sform is None else sform.tobytes(),
+        scode,
+    )
+
+
 def _warp_masks(
     tx: Transforms,
     ws: Workspace,
@@ -286,17 +301,22 @@ def run(
         reporter.step("deface mask")
 
         # Extra images may have their own voxel grid, so the masks are warped onto each
-        # one's grid rather than reused; on the input's grid this gives the same mask.
+        # one's grid. An image on a grid already seen (usually the input's own, as with
+        # MP2RAGE INV1, INV2 and UNI) shares that grid's mask, which saves an ANTs call.
+        masks_by_grid = {_grid_key(load_image(subject)): keep}
         extra_keeps = []
         for n, extra in enumerate(extras):
-            extra_face, extra_eyes = _warp_masks(tx, ws, template, regions, f"extra{n}", extra)
-            if not np.any(np.asanyarray(extra_face.dataobj)):
-                raise ValueError(
-                    f"The face mask is empty on {extra.name}, so it was not defaced. Its "
-                    "field of view may not include the face, or it is not in the same space "
-                    "as the main scan."
-                )
-            extra_keeps.append(masking.keep_mask(extra_face, extra_eyes))
+            grid = _grid_key(load_image(extra))
+            if grid not in masks_by_grid:
+                extra_face, extra_eyes = _warp_masks(tx, ws, template, regions, f"extra{n}", extra)
+                if not np.any(np.asanyarray(extra_face.dataobj)):
+                    raise ValueError(
+                        f"The face mask is empty on {extra.name}, so it was not defaced. Its "
+                        "field of view may not include the face, or it is not in the same "
+                        "space as the main scan."
+                    )
+                masks_by_grid[grid] = masking.keep_mask(extra_face, extra_eyes)
+            extra_keeps.append(masks_by_grid[grid])
 
         refaced = fill = None
         if regions.writes_refaced:

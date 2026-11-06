@@ -190,7 +190,9 @@ def test_the_eyes_always_use_the_face_registration(tmp_path, template, syn, face
     """The face mask goes with the affine (or --syn's brain registration); the eye mask, for
     the scan and for each extra image, with the nonlinear face registration."""
     subject = _save(tmp_path / "t.nii.gz", np.full((6, 5, 4), 7, np.int16))
-    extra = _save(tmp_path / "inv1.nii.gz", np.full((6, 5, 4), 5, np.int16))
+    shifted = np.eye(4)
+    shifted[0, 3] = 1  # another grid, so the extra image gets masks of its own
+    extra = _save(tmp_path / "inv1.nii.gz", np.full((6, 5, 4), 5, np.int16), shifted)
     options = deface.Options(
         threads=1, crop=False, qc=False, enucleate=True, syn=syn, template=template
     )
@@ -449,3 +451,22 @@ def test_a_nifti2_input_is_defaced_and_written_as_nifti1_without_noise(tmp_path,
         assert image.header.get_data_dtype() == np.int16
         want = code or int(original.header["sform_code"])
         assert int(image.header["sform_code"]) == want
+
+
+def test_extra_images_on_the_inputs_grid_share_its_mask_and_others_get_their_own(
+    tmp_path, template
+):
+    subject = _save(tmp_path / "uni.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    same = _save(tmp_path / "inv1.nii.gz", np.full((6, 5, 4), 3, np.int16))
+    shifted = np.eye(4)
+    shifted[0, 3] = 1  # same size, other position: needs its own mask
+    other = _save(tmp_path / "inv2.nii.gz", np.full((6, 5, 4), 3, np.int16), shifted)
+    options = deface.Options(threads=1, crop=False, qc=False, template=template)
+    registration = StandInRegistration()
+    outputs = deface.run(ScanToDeface(subject, (same, other)), options, registration=registration)
+    face_moves = [name for name, _ in registration.moved if "face_mask" in name]
+    assert len(face_moves) == 2  # the input's grid once (shared with inv1), inv2 once
+    np.testing.assert_array_equal(
+        np.asanyarray(nib.load(outputs.extra_defaced[0]).dataobj)[:, :, :] == 0,
+        np.asanyarray(nib.load(outputs.defaced).dataobj) == 0,
+    )
