@@ -395,3 +395,41 @@ def test_a_crop_that_would_remove_every_slice_is_found_before_anything_is_writte
     with pytest.raises(ValueError, match="remove every slice"):
         deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
     assert [path.name for path in tmp_path.glob("t1_*")] == []
+
+
+def test_files_from_an_earlier_run_that_this_run_does_not_write_are_warned_about(
+    tmp_path, template
+):
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    options = deface.Options(threads=1, crop=False, reface=True, template=template)
+    deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
+    reporter = RecordingReporter()
+    plain = deface.Options(threads=1, crop=False, qc=False, overwrite=True, template=template)
+    deface.run(ScanToDeface(subject), plain, reporter, StandInRegistration())
+    [warning] = [w for w in reporter.warnings if "earlier one" in w]
+    assert "t1_refaced.nii.gz" in warning and "t1_faceoff_qc.html" in warning
+    assert "t1_defaced.nii.gz" not in warning
+    assert (tmp_path / "t1_refaced.nii.gz").exists()  # warned about, never deleted
+
+
+def test_a_first_run_has_nothing_left_over_to_warn_about(tmp_path, template):
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    reporter = RecordingReporter()
+    options = deface.Options(threads=1, crop=False, template=template)
+    deface.run(ScanToDeface(subject), options, reporter, StandInRegistration())
+    assert not any("earlier one" in w for w in reporter.warnings)
+
+
+def test_an_unusual_registration_scale_gives_a_warning_and_a_normal_one_does_not(
+    tmp_path, template
+):
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    options = deface.Options(threads=1, crop=False, qc=False, overwrite=True, template=template)
+    for scale, expect_warning in [(1.0, False), (1.1, False), (2.0, True), (0.5, True)]:
+        reporter = RecordingReporter()
+        stand_in = StandInRegistration(np.diag([scale, scale, scale, 1.0]))
+        try:
+            deface.run(ScanToDeface(subject), options, reporter, stand_in)
+        except ValueError:  # the scaled stand-in may miss the face; only the warning matters
+            pass
+        assert any("stretches the template" in w for w in reporter.warnings) == expect_warning

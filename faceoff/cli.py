@@ -267,8 +267,8 @@ def _deface_with_timer(scan: ScanToDeface, options: deface.Options) -> None:
     "--batch",
     metavar="FILES",
     help="Several separate scans (commas or spaces between names), each registered and "
-    "defaced on its own. Every file is checked before the first one starts; if ANTs then fails "
-    "on one, the others still run.",
+    "defaced on its own. Every file is checked before the first one starts; if one then fails, "
+    "the others still run.",
 )
 @click.option(
     "--extra-images",
@@ -435,11 +435,17 @@ def cli(
     for scan in scans:
         try:
             _deface_with_timer(scan, options)
-        except (AntsError, ValueError) as failure:
-            error(f"{scan.scan}: {failure}")
+        except Exception as failure:  # noqa: BLE001 (the other scans still run)
+            if isinstance(failure, AntsError | ValueError):
+                error(f"{scan.scan}: {failure}")
+            else:  # not a failure FaceOff expects: keep the traceback
+                error(f"{scan.scan}: {type(failure).__name__}: {failure}")
+                console.print_exception()
             failed.append(scan)
     if failed:
-        error(f"{len(failed)} of {len(scans)} scans failed.")
+        error(
+            f"{len(failed)} of {len(scans)} scans failed: " + ", ".join(s.scan.name for s in failed)
+        )
         raise SystemExit(1)
     console.print(f"[dim]{CITATION_NOTICE}[/]")
 

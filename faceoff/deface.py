@@ -20,6 +20,11 @@ from .reorient import Crop, TalReorientation
 from .scratch import Workspace, workspace
 from .template import Template
 
+# The registration's affine takes template points to scan points. Its stretch along each axis is
+# about 1 for an adult head; outside this range the registration has probably gone wrong (or
+# the head is a child's).
+MIN_HEAD_SCALE, MAX_HEAD_SCALE = 0.7, 1.4
+
 
 @dataclass(frozen=True)
 class Options:
@@ -182,6 +187,16 @@ class Reporter:
         """Called once, after the last output is written."""
 
 
+def _left_over(subject: Path, extras: list[Path], options: Options, outputs: Outputs) -> list[Path]:
+    """Return FaceOff-named files beside the scan, from an earlier run with other options, that
+    this run does not write. They no longer match its outputs (an old refaced image next to a
+    new defaced one, for example), so the run warns about them."""
+    everything = replace(options, reface=True, reorient=True, qc=True)
+    possible = Outputs.for_input(subject, extras, everything).written()
+    written = set(outputs.written())
+    return [p for p in possible if p not in written and (p.exists() or p.is_symlink())]
+
+
 def _warp_masks(
     tx: Transforms,
     ws: Workspace,
@@ -235,6 +250,12 @@ def run(
     reporter = reporter or Reporter()
     outputs = Outputs.for_input(subject, extras, options)
     reporter.begin(subject, options, outputs)
+    if old := _left_over(subject, extras, options, outputs):
+        reporter.warn(
+            "Not updated by this run and left from an earlier one: "
+            + ", ".join(path.name for path in old)
+            + ". They may no longer match the new outputs."
+        )
 
     with workspace() as ws:
         regions = options.regions
@@ -245,6 +266,13 @@ def run(
         if options.reorient and options.crop:
             for image_path in (subject, *extras):
                 tal.check_crop(load_image(image_path))
+        sizes = np.linalg.svd(tx.affine_lps[:3, :3], compute_uv=False)
+        if sizes.min() < MIN_HEAD_SCALE or sizes.max() > MAX_HEAD_SCALE:
+            reporter.warn(
+                f"The registration stretches the template by {sizes.min():.2f} to "
+                f"{sizes.max():.2f} times along its axes, which is unusual for an adult head. "
+                "Check the deface mask on the QC page."
+            )
         reporter.step("registration to the template")
 
         # Everything is worked out in memory first, so a problem found along the way leaves no

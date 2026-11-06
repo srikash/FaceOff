@@ -17,6 +17,8 @@ def runs(monkeypatch):
         calls.append((scan.scan.name, options, scan.extra_images))
         if scan.scan.name.startswith("bad"):
             raise AntsError("antsRegistration failed (exit code 1).")
+        if scan.scan.name.startswith("odd"):
+            raise OSError("disk full")
 
     monkeypatch.setattr(ants_module, "local_ants_available", lambda: False)
     monkeypatch.setattr(cli_module.Container, "prepare", lambda self, log: None)
@@ -86,6 +88,15 @@ def test_batch_continues_after_a_failure_and_exits_1(tmp_path, runs):
     assert result.exit_code == 1
     assert [name for name, *_ in runs] == ["bad.nii.gz", "good.nii.gz"]
     assert "1 of 2 scans failed" in result.output
+
+
+def test_batch_also_continues_after_an_unexpected_error_and_shows_its_traceback(tmp_path, runs):
+    batch = ",".join([_scan(tmp_path, "odd.nii.gz"), _scan(tmp_path, "good.nii.gz")])
+    result = CliRunner().invoke(cli_module.cli, ["--batch", batch])
+    assert result.exit_code == 1
+    assert [name for name, *_ in runs] == ["odd.nii.gz", "good.nii.gz"]
+    assert "OSError: disk full" in result.output and "Traceback" in result.output
+    assert "1 of 2 scans failed: odd.nii.gz" in result.output
 
 
 def test_version():
