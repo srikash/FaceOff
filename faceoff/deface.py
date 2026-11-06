@@ -19,6 +19,7 @@ from .inputs import ScanToDeface, strip_extension
 from .regions import Regions
 from .registration import Stage, Transforms, register
 from .reorient import Crop, TalReorientation
+from .scratch import PREFIX as SCRATCH_PREFIX
 from .scratch import Workspace, workspace
 from .template import Template
 
@@ -188,6 +189,19 @@ def _left_over(subject: Path, extras: list[Path], options: Options, outputs: Out
     return [p for p in possible if p not in written and (p.exists() or p.is_symlink())]
 
 
+def _left_by_killed_run(subject: Path, extras: list[Path], options: Options) -> list[Path]:
+    """Return hidden scratch folders and temporary output files in the scan's (and the extra
+    images') folders that a run killed without warning (SIGKILL, for example by a scheduler's
+    memory limit) could not clean up. Another run may be using them, so they are only reported."""
+    everything = replace(options, reface=True, reorient=True, qc=True)
+    names = {p.name for p in Outputs.for_input(subject, extras, everything).written()}
+    found: list[Path] = []
+    for folder in sorted({subject.parent, *(extra.parent for extra in extras)}):
+        found += [p for p in folder.glob(f"{SCRATCH_PREFIX}*") if p.is_dir()]
+        found += [p for p in folder.glob(".tmp-*") if p.name.split("-", 2)[-1] in names]
+    return found
+
+
 class _Staging:
     """Output files written under temporary names, renamed to their real names together.
 
@@ -294,8 +308,14 @@ def run(
             + ", ".join(path.name for path in old)
             + ". They may no longer match the new outputs."
         )
+    if killed := _left_by_killed_run(subject, extras, options):
+        reporter.warn(
+            "Left by a FaceOff run that was killed: "
+            + ", ".join(path.name for path in killed)
+            + ". Delete them if no other FaceOff is running in this folder."
+        )
 
-    with workspace() as ws:
+    with workspace(subject.parent) as ws:
         regions = options.regions
         tx = registration(ws, subject, options)
         # The reorientation is worked out now, so a registration that cannot be used (see

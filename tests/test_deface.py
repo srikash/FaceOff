@@ -597,3 +597,37 @@ def test_each_extra_image_is_released_before_the_next_one_is_read(tmp_path, temp
     options = deface.Options(threads=1, crop=False, qc=False, template=template)
     deface.run(ScanToDeface(subject, extras), options, registration=StandInRegistration())
     assert len(made) == 4
+
+
+def test_leftovers_of_a_killed_run_are_reported_and_never_deleted(tmp_path, template):
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    scratch = tmp_path / ".faceoff-20261106T000000Z-abcdef123456"
+    scratch.mkdir()
+    (scratch / "warp.nii.gz").write_bytes(b"x")
+    temporary = tmp_path / ".tmp-1a2b3c4d-t1_defaced.nii.gz"
+    temporary.write_bytes(b"x")
+    other = tmp_path / ".tmp-1a2b3c4d-notes.txt"  # not one of FaceOff's outputs
+    other.write_bytes(b"x")
+    reporter = RecordingReporter()
+    options = deface.Options(threads=1, crop=False, qc=False, template=template)
+    deface.run(ScanToDeface(subject), options, reporter, StandInRegistration())
+    [warning] = [w for w in reporter.warnings if "was killed" in w]
+    assert scratch.name in warning and temporary.name in warning and other.name not in warning
+    assert scratch.exists() and temporary.exists() and other.exists()  # only reported
+
+
+def test_the_scratch_folder_is_beside_the_scan_and_gone_afterwards(tmp_path, template):
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    seen = []
+
+    class Looking(StandInRegistration):
+        def __call__(self, ws, subject, options):
+            seen.append(ws.root)
+            return super().__call__(ws, subject, options)
+
+    options = deface.Options(threads=1, crop=False, qc=False, template=template)
+    deface.run(ScanToDeface(subject), options, registration=Looking())
+    [root] = seen
+    assert root.parent == tmp_path and root.name.startswith(".faceoff-")
+    assert not root.exists()
+    assert not [p for p in tmp_path.iterdir() if p.name.startswith((".faceoff-", ".tmp-"))]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import signal
 from pathlib import Path
 from typing import Any
 
@@ -216,6 +217,12 @@ def _extra_images_or_batch() -> Padding:
         ),
         (1, 0, 0, 0),
     )
+
+
+def _terminate(signum: int, frame: Any) -> None:
+    """Turn SIGTERM (a scheduler's time limit, `kill`) into a normal exit, so that the
+    temporary folder and files are cleaned up as with Ctrl-C."""
+    raise SystemExit(128 + signum)
 
 
 def _at_least_one(context: Any, parameter: Any, value: int | None) -> int | None:
@@ -433,16 +440,20 @@ def cli(
         console.print()
 
     failed = []
-    for scan in scans:
-        try:
-            _deface_with_timer(scan, options)
-        except Exception as failure:  # noqa: BLE001 (the other scans still run)
-            if isinstance(failure, AntsError | ValueError | OSError | EOFError):
-                error(f"{scan.scan}: {failure}")
-            else:  # not a failure FaceOff expects: keep the traceback
-                error(f"{scan.scan}: {type(failure).__name__}: {failure}")
-                console.print_exception()
-            failed.append(scan)
+    previous = signal.signal(signal.SIGTERM, _terminate)
+    try:
+        for scan in scans:
+            try:
+                _deface_with_timer(scan, options)
+            except Exception as failure:  # noqa: BLE001 (the other scans still run)
+                if isinstance(failure, AntsError | ValueError | OSError | EOFError):
+                    error(f"{scan.scan}: {failure}")
+                else:  # not a failure FaceOff expects: keep the traceback
+                    error(f"{scan.scan}: {type(failure).__name__}: {failure}")
+                    console.print_exception()
+                failed.append(scan)
+    finally:
+        signal.signal(signal.SIGTERM, previous)
     if failed:
         error(
             f"{len(failed)} of {len(scans)} scans failed: " + ", ".join(s.scan.name for s in failed)

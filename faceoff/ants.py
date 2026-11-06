@@ -128,7 +128,8 @@ def _mounts(args: Sequence[str | Path], scratch: Path) -> list[tuple[Path, bool]
     """Return the folders the container needs: the temporary folder (writable), and the
     folder of every file named in the command, including inside ANTs brackets such as
     `MI[a,b,1,32]` (read-only). A folder inside one already listed is skipped, because Docker
-    refuses to mount the same place twice."""
+    refuses to mount the same place twice. The list is ordered parents first: the temporary
+    folder sits inside the scan's folder, and a read-only parent listed after it would hide it."""
     folders = set()
     for arg in args:
         for token in re.split(r"[\[\],]", str(arg)):
@@ -139,7 +140,7 @@ def _mounts(args: Sequence[str | Path], scratch: Path) -> list[tuple[Path, bool]
     for folder in sorted(folders, key=lambda f: (len(f.parts), str(f))):
         if not any(folder.is_relative_to(done) for done, _ in chosen):
             chosen.append((folder, False))
-    return chosen
+    return sorted(chosen, key=lambda item: (len(item[0].parts), str(item[0])))
 
 
 class RecordingAnts:

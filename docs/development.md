@@ -21,7 +21,7 @@ faceoff/masking.py      removing the face and eyes, and inserting the template f
 faceoff/reorient.py     template orientation (header only) and the ITK/FSL transforms
 faceoff/messages.py     what is printed in the terminal
 faceoff/ants.py         running ANTs: your own install, Docker, or Apptainer
-faceoff/scratch.py      the temporary folder for each run
+faceoff/scratch.py      the hidden temporary folder (.faceoff-…) each run makes beside the scan
 faceoff/template.py     the template: its files, brain centre and crop range; template_files.py downloads it
 bundle_template.py      puts the template files into the pip package when it is built
 tests/                  automated tests

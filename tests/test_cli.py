@@ -269,3 +269,9 @@ def test_empty_batch_is_refused(tmp_path, runs):
     result = CliRunner().invoke(cli_module.cli, ["--batch", ""])
     assert result.exit_code == 2
     assert not runs
+
+
+def test_sigterm_ends_the_run_like_ctrl_c_so_that_the_temporary_files_are_cleaned_up():
+    with pytest.raises(SystemExit) as stopped:
+        cli_module._terminate(15, None)
+    assert stopped.value.code == 143

@@ -58,7 +58,8 @@ def test_nested_folders_are_mounted_once(tmp_path):
     (tmp_path / "a" / "b").mkdir(parents=True)
     ants = DockerAnts(threads=1, scratch=tmp_path / "s")
     cmd = ants.command("x", [f"{tmp_path}/a/f.nii.gz", f"{tmp_path}/a/b/g.nii.gz"])
-    assert _mounts(cmd)[1:] == [f"type=bind,source={tmp_path}/a,target={tmp_path}/a,readonly"]
+    assert f"type=bind,source={tmp_path}/a,target={tmp_path}/a,readonly" in _mounts(cmd)
+    assert len(_mounts(cmd)) == 2  # the temporary folder and /a; /a/b is inside /a
 
 
 def test_apptainer_command_keeps_the_host_out(tmp_path):
@@ -184,3 +185,22 @@ def test_container_run_reports_tool_failure(monkeypatch, runner):
     )
     with pytest.raises(AntsError, match="antsRegistration failed \\(exit code 3\\)"):
         runner.run("antsRegistration", [])
+
+
+def test_the_parent_of_the_temporary_folder_is_mounted_before_it(tmp_path):
+    """The temporary folder is inside the scan's folder. A read-only parent listed after the
+    writable child would hide it (Apptainer applies the binds in order)."""
+    (tmp_path / "data").mkdir()
+    scratch = tmp_path / "data" / ".faceoff-20261106T000000Z-abc"
+    scan = f"{tmp_path}/data/sub.nii.gz"
+    docker = DockerAnts(threads=1, scratch=scratch).command("x", ["--input", scan])
+    apptainer = ApptainerAnts(
+        threads=1, scratch=scratch, image=Path("/c/ants.sif"), executable="/usr/bin/apptainer"
+    ).command("x", ["--input", scan])
+    for cmd, key in [(docker, "target"), (apptainer, "destination")]:
+        mounts = _mounts(cmd)
+        assert mounts == [
+            f"type=bind,source={tmp_path}/data,{key}={tmp_path}/data,"
+            + ("readonly" if key == "target" else "ro"),
+            f"type=bind,source={scratch},{key}={scratch}",
+        ]
