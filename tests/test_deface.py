@@ -287,8 +287,24 @@ def test_failed_qc_does_not_report_old_page(tmp_path, template, monkeypatch, cap
     options = deface.Options(threads=1, crop=False, template=template, overwrite=True)
     outputs = deface.run(ScanToDeface(subject), options, ConsoleReporter(), StandInRegistration())
     assert outputs.qc is None
-    assert old_qc.read_text() == "old page"
+    assert not old_qc.exists()  # a page left over from the last run would show the wrong scan
     assert str(old_qc) not in capsys.readouterr().out
+
+
+def test_failed_qc_that_cannot_clear_the_old_page_still_finishes(tmp_path, template, capsys):
+    from faceoff.messages import ConsoleReporter
+
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    blocked = tmp_path / "t1_faceoff_qc.html"
+    blocked.mkdir()  # neither written over nor deleted as a file
+    options = deface.Options(threads=1, crop=False, template=template, overwrite=True)
+    outputs = deface.run(ScanToDeface(subject), options, ConsoleReporter(), StandInRegistration())
+    assert outputs.qc is None and outputs.defaced.exists()
+    text = capsys.readouterr().out
+    assert "could not be removed" in text
+    ticked = [line for line in text.splitlines() if line.strip().startswith("✓")]
+    assert not any(line.endswith("t1_faceoff_qc.html") for line in ticked)
+    assert any(line.endswith("t1_defaced.nii.gz") for line in ticked)  # the check can see ticks
 
 
 def test_overwrite_replaces_existing_output(tmp_path, template):

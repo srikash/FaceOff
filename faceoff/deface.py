@@ -278,7 +278,15 @@ def run(
                 )
                 reporter.step("QC page")
             except Exception as problem:  # noqa: BLE001 (any failure here is only a warning)
-                reporter.warn(f"No QC page: {type(problem).__name__}: {problem}")
+                # A page from an earlier run would show a different defacing; --overwrite
+                # already allows replacing it.
+                old_page = outputs.qc.exists()
+                try:
+                    outputs.qc.unlink(missing_ok=True)
+                    cleared = " The old page was removed." if old_page else ""
+                except OSError as unlink_problem:
+                    cleared = f" The old page could not be removed: {unlink_problem}."
+                reporter.warn(f"No QC page: {type(problem).__name__}: {problem}.{cleared}")
                 outputs = replace(outputs, qc=None)
                 reporter.qc_failed()
 
