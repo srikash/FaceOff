@@ -218,7 +218,7 @@ class Container:
         with tempfile.TemporaryDirectory(dir=target.parent) as temp:
             partial = Path(temp) / target.name
             pulled = subprocess.run(
-                [executable, "pull", str(partial), f"docker://{ANTS_IMAGE}"]
+                [executable, "pull", str(partial), f"docker://{ANTS_IMAGE}"], check=False
             ).returncode
             if pulled != 0:
                 raise RuntimeError(f"Could not download docker://{ANTS_IMAGE} with {executable}.")
@@ -252,7 +252,11 @@ def _check_local_ants(log: Callable[[str], None]) -> None:
         )
     try:
         output = subprocess.run(
-            ["antsRegistration", "--version"], capture_output=True, text=True, timeout=30
+            ["antsRegistration", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
         ).stdout
     except (OSError, subprocess.SubprocessError):
         output = ""
@@ -297,7 +301,12 @@ def _ensure_docker_image(image: str = ANTS_IMAGE) -> None:
             + image
             + "; on a cluster, try --engine apptainer, or put your own ANTs on your PATH."
         )
-    if subprocess.run(["docker", "image", "inspect", image], capture_output=True).returncode == 0:
+    if (
+        subprocess.run(
+            ["docker", "image", "inspect", image], capture_output=True, check=False
+        ).returncode
+        == 0
+    ):
         return
-    if subprocess.run(["docker", "pull", image]).returncode != 0:
+    if subprocess.run(["docker", "pull", image], check=False).returncode != 0:
         raise RuntimeError(f"Could not pull {image}. Is the Docker daemon running?")

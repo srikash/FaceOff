@@ -6,8 +6,8 @@ import re
 import nibabel as nib
 import numpy as np
 import pytest
-
 from conftest import StandInRegistration, write_template
+
 from faceoff import deface
 from faceoff.inputs import ScanToDeface
 from faceoff.registration import Stage

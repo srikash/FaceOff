@@ -186,8 +186,10 @@ def _extra_images_or_batch() -> Padding:
     for row in (
         (
             "For",
-            "Other images from the same session as -i: MP2RAGE INV1, INV2, and UNI, or "
-            "GRE echoes (4D is fine)",
+            (
+                "Other images from the same session as -i: MP2RAGE INV1, INV2, and UNI, or "
+                "GRE echoes (4D is fine)"
+            ),
             "Separate scans, such as one T1w for each subject",
         ),
         ("Registered", "Once, on the -i scan", "Once for every scan"),
@@ -196,8 +198,10 @@ def _extra_images_or_batch() -> Padding:
         ("If one fails", "The whole run stops", "The other scans still run"),
         (
             "Example",
-            "[bold white]faceoff[/] [bold cyan]-i[/] [green]sub-01_UNIT1.nii.gz[/] "
-            "[bold cyan]--extra-images[/] [green]sub-01_inv-*_MP2RAGE.nii.gz[/]",
+            (
+                "[bold white]faceoff[/] [bold cyan]-i[/] [green]sub-01_UNIT1.nii.gz[/] "
+                "[bold cyan]--extra-images[/] [green]sub-01_inv-*_MP2RAGE.nii.gz[/]"
+            ),
             "[bold white]faceoff[/] [bold cyan]--batch[/] [green]sub-*_T1w.nii.gz[/]",
         ),
     ):

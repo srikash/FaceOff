@@ -14,7 +14,6 @@ def test_workspace_name_and_cleanup(tmp_path):
 
 
 def test_workspace_removed_on_error(tmp_path):
-    with pytest.raises(RuntimeError):
-        with workspace(tmp_path) as ws:
-            raise RuntimeError("boom")
+    with pytest.raises(RuntimeError), workspace(tmp_path) as ws:
+        raise RuntimeError("boom")
     assert not ws.root.exists()

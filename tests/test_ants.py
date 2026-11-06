@@ -1,10 +1,9 @@
+import sys
 from pathlib import Path
 
 import pytest
 
 from faceoff import ants as ants_module
-import sys
-
 from faceoff.ants import (
     REQUIRED_TOOLS,
     AntsError,
@@ -145,7 +144,7 @@ def test_local_prepare_logs_the_version_and_warns_when_it_differs(monkeypatch):
         monkeypatch.setattr(
             ants_module.subprocess,
             "run",
-            lambda cmd, **kw: type("R", (), {"stdout": output})(),
+            lambda cmd, output=output, **kw: type("R", (), {"stdout": output})(),
         )
         messages: list[str] = []
         Container("local").prepare(messages.append)

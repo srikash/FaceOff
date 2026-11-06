@@ -2,8 +2,8 @@ from pathlib import Path
 
 import nibabel as nib
 import numpy as np
-
 from conftest import write_template
+
 from faceoff.reorient import _LPS_FLIP, TalReorientation, _itk_to_flirt
 from faceoff.template import TEMPLATE_CROP_Z_MM, Template
 

@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 from click.testing import CliRunner
 
@@ -46,7 +44,7 @@ def test_flags_reach_the_defacing(tmp_path, runs):
         ["-i", _scan(tmp_path, "a.nii.gz"), "--reface", "--no-crop", "-n", "3"],
     )
     assert result.exit_code == 0, result.output
-    [(name, options, extras)] = runs
+    [(name, options, _extras)] = runs
     assert name == "a.nii.gz"
     assert (options.threads, options.reface, options.crop, options.reorient, options.syn) == (
         3,
@@ -99,7 +97,7 @@ def test_extra_images_take_spaces_or_commas(tmp_path, runs):
     a, b, c, d = (_scan(tmp_path, f"{n}.nii.gz") for n in "abcd")
     result = CliRunner().invoke(cli_module.cli, ["-i", a, "--extra-images", b, f"{c},{d}"])
     assert result.exit_code == 0, result.output
-    [(name, options, extras)] = runs
+    [(name, _options, extras)] = runs
     assert name == "a.nii.gz"
     assert [p.name for p in extras] == ["b.nii.gz", "c.nii.gz", "d.nii.gz"]
 
