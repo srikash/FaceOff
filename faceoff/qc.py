@@ -84,13 +84,15 @@ class _Section:
     panels: list[_Panel]
 
 
-def _ras(image: nib.Nifti1Image) -> tuple[np.ndarray, tuple[float, float, float]]:
+def _ras(
+    image: nib.Nifti1Image, dtype: type = np.float32
+) -> tuple[np.ndarray, tuple[float, float, float]]:
     """Return the first volume in RAS orientation (x right, y anterior, z superior), and the
     voxel size along those axes."""
     while image.ndim > 3:  # a 4D image (GRE echoes, ...): show the first volume, read alone
         image = image.slicer[..., 0]
     canonical = nib.as_closest_canonical(image)
-    data = np.asarray(canonical.dataobj, dtype=np.float32)
+    data = np.asarray(canonical.dataobj, dtype=dtype)
     x, y, z = (float(zoom) for zoom in canonical.header.get_zooms()[:3])
     return data, (x, y, z)
 
@@ -108,10 +110,13 @@ def _sweep_gif(panels: list[_Panel]) -> tuple[str, int]:
     cropped to the head and to what was inserted. Panels share one brightness scale.
     """
     volumes = [_ras(panel.image) for panel in panels]
-    parts = [_ras(p.template_part)[0] > 0 if p.template_part is not None else None for p in panels]
+    parts = [
+        _ras(p.template_part, np.uint8)[0] > 0 if p.template_part is not None else None
+        for p in panels
+    ]
     shape = volumes[0][0].shape
     positive = np.concatenate([v[v > 0] for v, _ in volumes] + [np.zeros(1, np.float32)])
-    top = float(np.percentile(positive, 99.5)) if positive.size > 1 else 1.0
+    top = float(np.percentile(positive, 99.5, overwrite_input=True)) if positive.size > 1 else 1.0
     top = top if top > 0 else 1.0
 
     bright = np.zeros(shape, bool)

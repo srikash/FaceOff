@@ -18,7 +18,7 @@ def keep_mask(
     remove = np.asanyarray(face_mask_in_subject.dataobj) != 0
     if eye_mask_in_subject is not None:
         remove |= np.asanyarray(eye_mask_in_subject.dataobj) != 0
-    return _like(face_mask_in_subject, ~remove)
+    return _mask_like(face_mask_in_subject, ~remove)
 
 
 def fill_region(
@@ -34,7 +34,7 @@ def fill_region(
         fill |= np.asanyarray(face_mask_in_subject.dataobj) != 0
     if eyes and eye_mask_in_subject is not None:
         fill |= np.asanyarray(eye_mask_in_subject.dataobj) != 0
-    return _like(face_mask_in_subject, fill)
+    return _mask_like(face_mask_in_subject, fill)
 
 
 def deface(subject: nib.Nifti1Image, keep: nib.Nifti1Image) -> nib.Nifti1Image:
@@ -70,17 +70,19 @@ def reface(
     region to fill (see `fill_region`); by default it is everything that was removed. Returns
     the refaced image and that scale factor.
     """
-    subject = np.asanyarray(defaced.dataobj, dtype=np.float32)
+    subject = np.asanyarray(defaced.dataobj)  # in its own type; only copied where it is used
     ref = np.asanyarray(template_ref.dataobj, dtype=np.float32)
+    if isinstance(template_ref.dataobj, np.ndarray) and np.shares_memory(ref, template_ref.dataobj):
+        ref = ref.copy()  # ref is scaled in place below; never change the caller's array
     brain = np.asanyarray(template_brain.dataobj) > 0
     removed = np.asanyarray(keep.dataobj) == 0
     face = removed if fill is None else np.asanyarray(fill.dataobj) != 0
-    subject_values = subject[brain & ~removed]
+    subject_values = subject[brain & ~removed].astype(np.float32)
     reference_values = ref[brain]
     if not subject_values.size or not reference_values.size:
         raise ValueError("Cannot reface: the brain region is empty.")
-    denominator = np.median(reference_values)
-    numerator = np.median(subject_values)
+    denominator = np.median(reference_values, overwrite_input=True)
+    numerator = np.median(subject_values, overwrite_input=True)
     if not np.isfinite(numerator) or not np.isfinite(denominator):
         raise ValueError("Cannot reface: brain intensities are invalid.")
     if numerator <= 0 or denominator <= 0:
@@ -93,7 +95,11 @@ def reface(
         raise ValueError("Cannot reface: brain intensity scale is invalid.")
     extra_axes = (1,) * (subject.ndim - face.ndim)  # a (x, y, z, 1) scan, as in deface()
     face, ref = face.reshape(face.shape + extra_axes), ref.reshape(ref.shape + extra_axes)
-    return _like(defaced, np.where(face, scale * ref, subject)), scale
+    # Built in the template's buffer: the template scaled over the filled region, the scan
+    # elsewhere. This saves two scan-sized float32 copies at 0.5 mm voxels.
+    np.multiply(ref, scale, out=ref)
+    np.copyto(ref, subject, where=~face)
+    return _like(defaced, ref), scale
 
 
 def _scrubbed(header: nib.Nifti1Header) -> nib.Nifti1Header:
@@ -105,6 +111,14 @@ def _scrubbed(header: nib.Nifti1Header) -> nib.Nifti1Header:
         header[field] = b""
     header.extensions = nib.nifti1.Nifti1Extensions()
     return header
+
+
+def _mask_like(image: nib.Nifti1Image, mask: np.ndarray) -> nib.Nifti1Image:
+    """Return a 0/1 mask like `image`. In memory it is uint8 (a quarter of float32), and the
+    header says float32, so the file written from it is the same as before."""
+    header = _scrubbed(image.header)
+    header.set_data_dtype(np.float32)
+    return nib.Nifti1Image(mask.astype(np.uint8, copy=False), image.affine, header)
 
 
 def _like(image: nib.Nifti1Image, data: np.ndarray) -> nib.Nifti1Image:
