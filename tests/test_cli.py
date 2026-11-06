@@ -1,3 +1,5 @@
+import nibabel as nib
+import numpy as np
 import pytest
 from click.testing import CliRunner
 
@@ -23,9 +25,16 @@ def runs(monkeypatch):
     return calls
 
 
-def _scan(tmp_path, name):
+def _file(tmp_path, name):
+    """An empty file, for options that only need a file to exist (such as --sif)."""
     path = tmp_path / name
     path.write_bytes(b"")
+    return str(path)
+
+
+def _scan(tmp_path, name):
+    path = tmp_path / name
+    nib.save(nib.Nifti1Image(np.zeros((2, 2, 2), np.int16), np.eye(4)), path)
     return str(path)
 
 
@@ -132,7 +141,7 @@ def test_missing_extra_image_stops_before_anything_runs(tmp_path, runs):
 
 
 def test_sif_means_apptainer(tmp_path, runs):
-    sif = _scan(tmp_path, "ants.sif")
+    sif = _file(tmp_path, "ants.sif")
     result = CliRunner().invoke(cli_module.cli, ["-i", _scan(tmp_path, "a.nii.gz"), "--sif", sif])
     assert result.exit_code == 0, result.output
     [(_, options, _)] = runs
@@ -172,7 +181,7 @@ def test_sif_is_refused_with_local(tmp_path, runs):
             "--engine",
             "local",
             "--sif",
-            _scan(tmp_path, "x.sif"),
+            _file(tmp_path, "x.sif"),
         ],
     )
     assert result.exit_code == 2
@@ -188,7 +197,7 @@ def test_sif_is_refused_with_docker(tmp_path, runs):
             "--engine",
             "docker",
             "--sif",
-            _scan(tmp_path, "x.sif"),
+            _file(tmp_path, "x.sif"),
         ],
     )
     assert result.exit_code == 2

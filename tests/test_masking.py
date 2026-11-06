@@ -76,6 +76,16 @@ def test_reface_rejects_invalid_brain_intensities():
 
     keep = _img([[[1]]])
     brain = _img([[[1]]])
-    for subject, reference in [(1, 0), (float("nan"), 1), (1, float("inf"))]:
+    for subject, reference in [(float("nan"), 1), (1, float("inf"))]:
         with pytest.raises(ValueError, match="brain intensities are invalid"):
+            masking.reface(_img([[[subject]]]), keep, _img([[[reference]]]), brain)
+
+
+def test_reface_rejects_a_zero_or_negative_median_brain_intensity():
+    import pytest
+
+    keep = _img([[[1]]])
+    brain = _img([[[1]]])
+    for subject, reference in [(1, 0), (0, 1), (-0.3, 1), (1, -2)]:
+        with pytest.raises(ValueError, match="zero or negative"):
             masking.reface(_img([[[subject]]]), keep, _img([[[reference]]]), brain)

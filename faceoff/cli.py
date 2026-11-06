@@ -413,7 +413,7 @@ def cli(
             container=container,
             overwrite=overwrite,
         )
-        deface.check_outputs(scans, options)
+        deface.check_inputs(scans, options)
     except ValueError as problem:  # InputError, or a container choice that does not fit
         raise click.UsageError(str(problem)) from problem
 

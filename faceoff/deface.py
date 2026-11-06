@@ -9,6 +9,7 @@ from pathlib import Path
 
 import nibabel as nib
 import numpy as np
+from nibabel.filebasedimages import ImageFileError
 
 from . import masking, qc
 from .ants import Container
@@ -116,6 +117,26 @@ class Outputs:
         return paths
 
 
+def check_inputs(scans: list[ScanToDeface], options: Options) -> None:
+    """Reject runs that cannot work, before any scan is processed: refacing a 4D scan (one
+    intensity scale from the first volume would be wrong for the others), and conflicting
+    outputs (see check_outputs)."""
+    if options.regions.writes_refaced:
+        for scan in scans:
+            try:
+                shape = load_image(scan.scan).shape
+            except (ImageFileError, OSError, EOFError) as problem:
+                raise ValueError(
+                    f"{scan.scan.name} cannot be read as a NIfTI image: {problem}"
+                ) from problem
+            if len(shape) > 3 and any(size != 1 for size in shape[3:]):
+                raise ValueError(
+                    f"{scan.scan.name} is 4D ({'x'.join(map(str, shape))}); refacing needs a 3D "
+                    "scan. Deface it without --reface/--renucleate."
+                )
+    check_outputs(scans, options)
+
+
 def check_outputs(scans: list[ScanToDeface], options: Options) -> None:
     """Reject conflicting outputs before processing any scan."""
     inputs = {path.resolve() for scan in scans for path in (scan.scan, *scan.extra_images)}
@@ -214,7 +235,7 @@ def run(
     `registration` registers the scan to the template: ANTs by default. The tests pass a
     stand-in that moves template images with a known affine.
     """
-    check_outputs([scan], options)
+    check_inputs([scan], options)
     template = options.template
     subject, extras = scan.scan, list(scan.extra_images)
     reporter = reporter or Reporter()
@@ -244,6 +265,12 @@ def run(
         extra_keeps = []
         for n, extra in enumerate(extras):
             extra_face, extra_eyes = _warp_masks(tx, ws, template, regions, f"extra{n}", extra)
+            if not np.any(np.asanyarray(extra_face.dataobj)):
+                raise ValueError(
+                    f"The face mask is empty on {extra.name}, so it was not defaced. Its "
+                    "field of view may not include the face, or it is not in the same space "
+                    "as the main scan."
+                )
             extra_keeps.append(masking.keep_mask(extra_face, extra_eyes))
 
         refaced = fill = None

@@ -81,8 +81,13 @@ def reface(
         raise ValueError("Cannot reface: the brain region is empty.")
     denominator = np.median(reference_values)
     numerator = np.median(subject_values)
-    if not np.isfinite(numerator) or not np.isfinite(denominator) or denominator == 0:
+    if not np.isfinite(numerator) or not np.isfinite(denominator):
         raise ValueError("Cannot reface: brain intensities are invalid.")
+    if numerator <= 0 or denominator <= 0:
+        raise ValueError(
+            "Cannot reface: the median brain intensity is zero or negative, so the template "
+            "cannot be scaled to this scan (MP2RAGE UNI images often have values around zero)."
+        )
     scale = float(numerator / denominator)
     if not np.isfinite(scale):
         raise ValueError("Cannot reface: brain intensity scale is invalid.")

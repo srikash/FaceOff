@@ -358,3 +358,36 @@ def test_a_mirroring_registration_stops_the_run_before_anything_is_written(tmp_p
     with pytest.raises(ValueError, match="mirrors the scan"):
         deface.run(ScanToDeface(subject), options, registration=StandInRegistration(mirror))
     assert sorted(path.name for path in tmp_path.iterdir() if path.is_file()) == ["t1.nii.gz"]
+
+
+def test_reface_refuses_a_4d_scan_before_writing_anything(tmp_path, template):
+    subject = _save(tmp_path / "gre.nii.gz", np.full((6, 5, 4, 3), 7, np.int16))
+    options = deface.Options(threads=1, reface=True, template=template)
+    with pytest.raises(ValueError, match="is 4D"):
+        deface.check_inputs([ScanToDeface(subject)], options)
+    with pytest.raises(ValueError, match="is 4D"):
+        deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
+    assert [path.name for path in tmp_path.glob("gre_*")] == []
+    deface.check_inputs([ScanToDeface(subject)], deface.Options(threads=1, template=template))
+
+
+def test_an_unreadable_scan_is_a_clear_error_when_refacing(tmp_path, template):
+    broken = tmp_path / "t1.nii.gz"
+    broken.write_bytes(b"")
+    options = deface.Options(threads=1, reface=True, template=template)
+    with pytest.raises(ValueError, match="cannot be read as a NIfTI image"):
+        deface.check_inputs([ScanToDeface(broken)], options)
+
+
+def test_an_extra_image_the_face_mask_misses_is_refused_and_nothing_is_written(tmp_path, template):
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    far = np.eye(4)
+    far[0, 3] = 500  # the extra's grid is far from the template's face
+    extra = _save(tmp_path / "inv1.nii.gz", np.full((6, 5, 4), 3, np.int16), far)
+    options = deface.Options(threads=1, crop=False, template=template)
+    with pytest.raises(ValueError, match=r"empty on inv1\.nii\.gz"):
+        deface.run(ScanToDeface(subject, (extra,)), options, registration=StandInRegistration())
+    assert sorted(path.name for path in tmp_path.iterdir() if path.is_file()) == [
+        "inv1.nii.gz",
+        "t1.nii.gz",
+    ]
