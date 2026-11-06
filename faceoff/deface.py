@@ -313,7 +313,8 @@ def run(
                     raise ValueError(
                         f"The face mask is empty on {extra.name}, so it was not defaced. Its "
                         "field of view may not include the face, or it is not in the same "
-                        "space as the main scan."
+                        "space as the main scan. If that is expected (a slab that does not cover "
+                        "the face), leave it out of --extra-images."
                     )
                 masks_by_grid[grid] = masking.keep_mask(extra_face, extra_eyes)
             extra_keeps.append(masks_by_grid[grid])

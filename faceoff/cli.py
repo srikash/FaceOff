@@ -437,7 +437,7 @@ def cli(
         try:
             _deface_with_timer(scan, options)
         except Exception as failure:  # noqa: BLE001 (the other scans still run)
-            if isinstance(failure, AntsError | ValueError):
+            if isinstance(failure, AntsError | ValueError | OSError | EOFError):
                 error(f"{scan.scan}: {failure}")
             else:  # not a failure FaceOff expects: keep the traceback
                 error(f"{scan.scan}: {type(failure).__name__}: {failure}")
