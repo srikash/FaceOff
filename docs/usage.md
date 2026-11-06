@@ -27,7 +27,7 @@ Reorientation changes only the image header. No voxel values are resampled or in
 
 ## What FaceOff refuses or warns about
 
-FaceOff reads, registers and works out every output before it writes the first file, so these refusals leave nothing half-written. (A failure while writing, such as a full disk, can still leave some files.)
+FaceOff reads, registers and works out the face mask and the reorientation before it writes the first file, so these refusals leave nothing half-written. Files are then written under temporary names (`.tmp-…`) in the output folder and renamed together at the end, so a failure while writing (a damaged extra image, a full disk, Ctrl-C) leaves the outputs of an earlier run as they were. The final renames happen one after another, not as a single step. An output that is a symbolic link is replaced by the new file, not written through.
 
 - **Refused:** a scan or extra image that is not a readable NIfTI image; `--reface` or `--renucleate` with a 4D scan; an extra image the face mask misses (its field of view may not include the face, or it is not in the same space as `-i`); a registration that mirrors the scan; refacing when the median brain intensity is zero or negative, as can happen with MP2RAGE UNI; a crop that would remove every slice.
 - **Warned about:** a registration that stretches the template by less than 0.7 or more than 1.4 times along an axis, which is unusual for an adult head (check the deface mask on the QC page); output files left over from an earlier run.

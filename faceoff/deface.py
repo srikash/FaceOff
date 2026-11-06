@@ -3,6 +3,8 @@ put the template's face and eyes back if asked, and reorient."""
 
 from __future__ import annotations
 
+import os
+import secrets
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -99,17 +101,6 @@ class Outputs:
             ),
         )
 
-    def tal_pairs(self) -> list[tuple[Path, Path]]:
-        """Return (image, its template-orientation copy) for every tal_ file to write; the
-        input's defaced image comes first."""
-        pairs = [
-            (self.defaced, self.tal_defaced),
-            (self.deface_mask, self.tal_deface_mask),
-            (self.refaced, self.tal_refaced),
-            *zip(self.extra_defaced, self.extra_tal_defaced),
-        ]
-        return [(source, target) for source, target in pairs if source and target]
-
     def written(self) -> list[Path]:
         """Return every file this run writes."""
         paths: list[Path] = []
@@ -195,6 +186,38 @@ def _left_over(subject: Path, extras: list[Path], options: Options, outputs: Out
     possible = Outputs.for_input(subject, extras, everything).written()
     written = set(outputs.written())
     return [p for p in possible if p not in written and (p.exists() or p.is_symlink())]
+
+
+class _Staging:
+    """Output files written under temporary names, renamed to their real names together.
+
+    The temporary name keeps the real file name and extension (so nibabel still picks the
+    format and compression) and sits in the same folder (so the rename is cheap and cannot
+    cross file systems). `os.replace` swaps one file atomically; the set of files is renamed
+    one after another, not as a single step.
+    """
+
+    def __init__(self) -> None:
+        self._pending: list[tuple[Path, Path]] = []
+        self._tag = secrets.token_hex(4)
+
+    def path(self, final: Path) -> Path:
+        """Return the temporary name to write `final`'s contents to."""
+        temporary = final.with_name(f".tmp-{self._tag}-{final.name}")
+        self._pending.append((temporary, final))
+        return temporary
+
+    def commit(self) -> None:
+        """Rename every temporary file to its real name."""
+        for temporary, final in self._pending:
+            os.replace(temporary, final)
+        self._pending.clear()
+
+    def discard(self) -> None:
+        """Delete any temporary file still there (after a failure or Ctrl-C)."""
+        for temporary, _ in self._pending:
+            temporary.unlink(missing_ok=True)
+        self._pending.clear()
 
 
 def _grid_key(image: nib.Nifti1Image) -> tuple:
@@ -318,12 +341,6 @@ def run(
                     )
                 masks_by_grid[grid] = masking.keep_mask(extra_face, extra_eyes)
             extra_keeps.append(masks_by_grid[grid])
-        # Read and mask the extra images now too: a file that is damaged past its header
-        # must stop the run before the first output is written.
-        extra_defaced = [
-            masking.deface(load_image(extra), extra_keep)
-            for extra, extra_keep in zip(extras, extra_keeps, strict=True)
-        ]
 
         refaced = fill = None
         if regions.writes_refaced:
@@ -339,28 +356,55 @@ def run(
             put_back = " and ".join(part for part, wanted in filled if wanted)
             reporter.step(f"template {put_back} inserted (intensity scale {scale:.3g})")
 
-        nib.save(keep, outputs.deface_mask)
-        nib.save(defaced, outputs.defaced)
-        qc_extras = []
-        for extra, image, target in zip(extras, extra_defaced, outputs.extra_defaced, strict=True):
-            nib.save(image, target)
-            if outputs.qc:  # the QC page reads the saved file back, one volume at a time
-                qc_extras.append((extra.name, target))
-        if refaced is not None:
-            assert outputs.refaced is not None  # set whenever regions.writes_refaced
-            nib.save(refaced, outputs.refaced)
-        reporter.step("face taken… off" + (f" ({len(extras)} extra image(s))" if extras else ""))
+        # Every file is written under a temporary name and renamed once all are done, so a
+        # failure while writing (a damaged extra image, a full disk, Ctrl-C) leaves the
+        # outputs of any earlier run as they were. Extra images are read, masked and written
+        # one at a time, and each image is written in template orientation from memory.
+        staging = _Staging()
+        try:
+            nib.save(keep, staging.path(outputs.deface_mask))
+            nib.save(defaced, staging.path(outputs.defaced))
+            if refaced is not None:
+                assert outputs.refaced is not None  # set whenever regions.writes_refaced
+                nib.save(refaced, staging.path(outputs.refaced))
+            qc_extras = []
+            extra_tal_targets = outputs.extra_tal_defaced or (None,) * len(extras)
+            for extra, extra_keep, target, tal_target in zip(
+                extras, extra_keeps, outputs.extra_defaced, extra_tal_targets, strict=True
+            ):
+                image = masking.deface(load_image(extra), extra_keep)
+                nib.save(image, staging.path(target))
+                if tal_target is not None:
+                    tal.write_image(image, staging.path(tal_target), options.crop)
+                del image
+                if outputs.qc:  # the QC page reads the saved file back, one volume at a time
+                    qc_extras.append((extra.name, target))
+            reporter.step(
+                "face taken… off" + (f" ({len(extras)} extra image(s))" if extras else "")
+            )
 
-        # The face is already removed. Save the rotation part of the affine; unless switched
-        # off, write the images in template orientation (header only, no resampling).
-        tal.write_transforms(subject, outputs.txn_itk, outputs.txn_fsl)
-        if options.reorient:
-            input_crop = tal.write_images(outputs.tal_pairs(), options.crop)[0]
-            if input_crop is not None:
-                reporter.cropped(input_crop)
-            reporter.step("reorientation (header only) and ITK/FSL transforms")
-        else:
-            reporter.step("ITK/FSL transforms (image not reoriented)")
+            # The face is already removed. Save the rotation part of the affine; unless
+            # switched off, write the images in template orientation (header only, no
+            # resampling).
+            tal.write_transforms(
+                subject, staging.path(outputs.txn_itk), staging.path(outputs.txn_fsl)
+            )
+            if options.reorient:
+                for tal_source, tal_target in [
+                    (defaced, outputs.tal_defaced),
+                    (keep, outputs.tal_deface_mask),
+                    (refaced, outputs.tal_refaced),
+                ]:
+                    if tal_source is not None and tal_target is not None:
+                        crop = tal.write_image(tal_source, staging.path(tal_target), options.crop)
+                        if tal_source is defaced and crop is not None:
+                            reporter.cropped(crop)
+                reporter.step("reorientation (header only) and ITK/FSL transforms")
+            else:
+                reporter.step("ITK/FSL transforms (image not reoriented)")
+            staging.commit()
+        finally:
+            staging.discard()
 
         # The QC page is written last: a problem with it must not stop the defacing.
         if outputs.qc:

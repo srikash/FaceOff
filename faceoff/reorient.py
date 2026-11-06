@@ -42,6 +42,7 @@ class TalReorientation:
     def __init__(self, rigid_lps: np.ndarray, template: Template) -> None:
         self.rigid_lps = rigid_lps
         self.template = template
+        self._crops: dict[tuple, Crop] = {}  # one crop per voxel grid
 
     @classmethod
     def from_affine_matrix(
@@ -92,6 +93,27 @@ class TalReorientation:
         slice. Reads the header only, so a run can find out before it writes anything."""
         _crop_slices(image.shape[:3], self._tal_affine(image), self.template.crop_z_mm)
 
+    def write_image(self, image: nib.Nifti1Image, target: Path, crop: bool) -> Crop | None:
+        """Write one image in template orientation to `target`, without resampling. See
+        `write_images`; images on the same voxel grid get the same crop, across calls."""
+        affine = self._tal_affine(image)
+        data = np.asanyarray(image.dataobj)
+        cropped = None
+        if crop:
+            grid = (image.shape[:3], affine.round(6).tobytes())
+            if grid not in self._crops:
+                self._crops[grid] = _crop_slices(image.shape[:3], affine, self.template.crop_z_mm)
+            cropped = self._crops[grid]
+            slices = [slice(None)] * data.ndim
+            slices[cropped.axis] = slice(cropped.first, cropped.last)
+            data = data[tuple(slices)]
+            affine[:3, 3] += affine[:3, cropped.axis] * cropped.first
+        tal = nib.Nifti1Image(data, affine, image.header)
+        tal.set_sform(affine, code=4)  # 4 = MNI152 space
+        tal.set_qform(affine, code=4)
+        nib.save(tal, target)
+        return cropped
+
     def write_images(
         self, sources_and_targets: Sequence[tuple[Path, Path]], crop: bool
     ) -> list[Crop | None]:
@@ -104,28 +126,10 @@ class TalReorientation:
         the same voxel grid get the same crop. Returns, for each image, what was cropped (or
         None).
         """
-        crops: dict[tuple, Crop] = {}
-        results: list[Crop | None] = []
-        for source, target in sources_and_targets:
-            image = load_image(source)
-            affine = self._tal_affine(image)
-            data = np.asanyarray(image.dataobj)
-            cropped = None
-            if crop:
-                grid = (image.shape[:3], affine.round(6).tobytes())
-                if grid not in crops:
-                    crops[grid] = _crop_slices(image.shape[:3], affine, self.template.crop_z_mm)
-                cropped = crops[grid]
-                slices = [slice(None)] * data.ndim
-                slices[cropped.axis] = slice(cropped.first, cropped.last)
-                data = data[tuple(slices)]
-                affine[:3, 3] += affine[:3, cropped.axis] * cropped.first
-            tal = nib.Nifti1Image(data, affine, image.header)
-            tal.set_sform(affine, code=4)  # 4 = MNI152 space
-            tal.set_qform(affine, code=4)
-            nib.save(tal, target)
-            results.append(cropped)
-        return results
+        return [
+            self.write_image(load_image(source), target, crop)
+            for source, target in sources_and_targets
+        ]
 
 
 def _crop_slices(

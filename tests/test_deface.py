@@ -479,7 +479,27 @@ def test_an_extra_image_damaged_past_its_header_stops_the_run_before_any_output(
     options = deface.Options(threads=1, crop=False, template=template)
     with pytest.raises(OSError, match="damaged"):
         deface.run(ScanToDeface(subject, (extra,)), options, registration=StandInRegistration())
-    assert [path.name for path in tmp_path.glob("uni_*")] == []
+    assert sorted(path.name for path in tmp_path.iterdir() if path.is_file()) == [
+        "inv1.nii",
+        "uni.nii.gz",
+    ]
+
+
+def test_a_failure_while_writing_leaves_an_earlier_runs_outputs_untouched(tmp_path, template):
+    subject = _save(tmp_path / "uni.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    extra = _save(tmp_path / "inv1.nii", np.arange(120, dtype=np.int16).reshape(6, 5, 4))
+    options = deface.Options(threads=1, crop=False, qc=False, overwrite=True, template=template)
+    scan = ScanToDeface(subject, (extra,))
+    deface.run(scan, options, registration=StandInRegistration())
+    before = {path.name: path.read_bytes() for path in tmp_path.iterdir() if path.is_file()}
+    extra.write_bytes(extra.read_bytes()[:-40])  # the extra is damaged now
+    with pytest.raises(OSError, match="damaged"):
+        deface.run(scan, options, registration=StandInRegistration())
+    after = {path.name: path.read_bytes() for path in tmp_path.iterdir() if path.is_file()}
+    assert set(after) == set(before)  # no temporary files left behind
+    assert {k: v for k, v in after.items() if k != "inv1.nii"} == {
+        k: v for k, v in before.items() if k != "inv1.nii"
+    }
 
 
 def test_a_crop_that_would_remove_every_slice_of_an_extra_image_is_found_first(tmp_path, template):
@@ -505,3 +525,27 @@ def test_extra_images_on_a_grid_that_differs_only_in_voxel_size_or_codes_get_own
     options = deface.Options(threads=1, crop=False, qc=False, template=template)
     deface.run(ScanToDeface(subject, (coded_path,)), options, registration=registration)
     assert len([n for n, _ in registration.moved if "face_mask" in n]) == 2
+
+
+def test_a_full_disk_while_writing_leaves_the_earlier_outputs_and_no_temporary_files(
+    tmp_path, template, monkeypatch
+):
+    subject = _save(tmp_path / "uni.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    options = deface.Options(threads=1, crop=False, qc=False, overwrite=True, template=template)
+    deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
+    before = {path.name: path.read_bytes() for path in tmp_path.iterdir() if path.is_file()}
+    subject = _save(tmp_path / "uni.nii.gz", np.full((6, 5, 4), 9, np.int16))  # new data
+    real_save, saves = deface.nib.save, []
+
+    def failing_save(image, filename):
+        saves.append(filename)
+        if len(saves) == 5:  # after the stand-in registration and the first outputs
+            raise OSError("No space left on device")
+        real_save(image, filename)
+
+    monkeypatch.setattr(deface.nib, "save", failing_save)
+    with pytest.raises(OSError, match="No space"):
+        deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
+    outputs = {path.name: path.read_bytes() for path in tmp_path.iterdir() if path.is_file()}
+    outputs.pop("uni.nii.gz"), before.pop("uni.nii.gz")
+    assert outputs == before  # nothing replaced, no .tmp files
