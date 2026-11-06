@@ -433,3 +433,19 @@ def test_an_unusual_registration_scale_gives_a_warning_and_a_normal_one_does_not
         except ValueError:  # the scaled stand-in may miss the face; only the warning matters
             pass
         assert any("stretches the template" in w for w in reporter.warnings) == expect_warning
+
+
+def test_a_nifti2_input_is_defaced_and_written_as_nifti1_without_noise(tmp_path, template, capsys):
+    path = tmp_path / "t1.nii.gz"
+    nib.save(nib.Nifti2Image(np.full((6, 5, 4), 7, np.int16), np.eye(4)), path)
+    capsys.readouterr()  # the test image's own saving may print; FaceOff must not
+    options = deface.Options(threads=1, crop=False, qc=False, template=template)
+    outputs = deface.run(ScanToDeface(path), options, registration=StandInRegistration())
+    assert capsys.readouterr().err == ""
+    original = nib.load(path)
+    for written, code in [(outputs.defaced, None), (outputs.tal_defaced, 4)]:
+        image = nib.load(written)
+        assert type(image) is nib.Nifti1Image
+        assert image.header.get_data_dtype() == np.int16
+        want = code or int(original.header["sform_code"])
+        assert int(image.header["sform_code"]) == want
