@@ -12,6 +12,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from nibabel.filebasedimages import ImageFileError
+
+from .images import load_image
+
 
 class InputError(ValueError):
     """A problem with the files or numbers given. Nothing has run yet."""
@@ -42,7 +46,7 @@ def scans_to_deface(scans: Sequence[Path], extra_images: Sequence[Path] = ()) ->
     """Check the scans (one with -i, several with --batch) and the extra images that go with
     a single scan, and return them with full paths.
 
-    Every file must exist and be .nii or .nii.gz, and a scan must not also be listed as one of
+    Every file must exist, be .nii or .nii.gz, and be readable as a NIfTI image, and a scan must not also be listed as one of
     its extra images. Raises InputError listing every problem found.
     """
     problems: list[str] = []
@@ -54,8 +58,11 @@ def scans_to_deface(scans: Sequence[Path], extra_images: Sequence[Path] = ()) ->
         else:
             try:
                 strip_extension(full)
+                load_image(full)  # reads the header only
             except InputError as problem:
                 problems.append(str(problem))
+            except (ImageFileError, OSError, EOFError, ValueError) as problem:
+                problems.append(f"{kind} cannot be read as a NIfTI image: {full.name} ({problem})")
         return full
 
     checked = [check(scan, "Scan") for scan in scans]

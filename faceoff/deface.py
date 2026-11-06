@@ -9,7 +9,6 @@ from pathlib import Path
 
 import nibabel as nib
 import numpy as np
-from nibabel.filebasedimages import ImageFileError
 
 from . import masking, qc
 from .ants import Container
@@ -123,12 +122,7 @@ def check_inputs(scans: list[ScanToDeface], options: Options) -> None:
     outputs (see check_outputs)."""
     if options.regions.writes_refaced:
         for scan in scans:
-            try:
-                shape = load_image(scan.scan).shape
-            except (ImageFileError, OSError, EOFError) as problem:
-                raise ValueError(
-                    f"{scan.scan.name} cannot be read as a NIfTI image: {problem}"
-                ) from problem
+            shape = load_image(scan.scan).shape
             if len(shape) > 3 and any(size != 1 for size in shape[3:]):
                 raise ValueError(
                     f"{scan.scan.name} is 4D ({'x'.join(map(str, shape))}); refacing needs a 3D "
@@ -248,6 +242,9 @@ def run(
         # The reorientation is worked out now, so a registration that cannot be used (see
         # TalReorientation) stops the run before any file is written.
         tal = TalReorientation.from_affine_matrix(tx.affine_lps, template)
+        if options.reorient and options.crop:
+            for image_path in (subject, *extras):
+                tal.check_crop(load_image(image_path))
         reporter.step("registration to the template")
 
         # Everything is worked out in memory first, so a problem found along the way leaves no

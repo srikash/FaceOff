@@ -83,6 +83,15 @@ class TalReorientation:
         flirt = _itk_to_flirt(self.rigid_lps, load_image(source), load_image(self.template.t1w))
         fsl_out.write_text("".join(" ".join(f"{v:.10f}" for v in row) + "\n" for row in flirt))
 
+    def _tal_affine(self, image: nib.Nifti1Image) -> np.ndarray:
+        """Return the image's affine after the rotation (RAS, template orientation)."""
+        return _LPS_FLIP @ np.linalg.inv(self.rigid_lps) @ _LPS_FLIP @ image.affine
+
+    def check_crop(self, image: nib.Nifti1Image) -> None:
+        """Raise ValueError if cropping this image to the template's z range would remove every
+        slice. Reads the header only, so a run can find out before it writes anything."""
+        _crop_slices(image.shape[:3], self._tal_affine(image), self.template.crop_z_mm)
+
     def write_images(
         self, sources_and_targets: Sequence[tuple[Path, Path]], crop: bool
     ) -> list[Crop | None]:
@@ -99,7 +108,7 @@ class TalReorientation:
         results: list[Crop | None] = []
         for source, target in sources_and_targets:
             image = load_image(source)
-            affine = _LPS_FLIP @ np.linalg.inv(self.rigid_lps) @ _LPS_FLIP @ image.affine
+            affine = self._tal_affine(image)
             data = np.asanyarray(image.dataobj)
             cropped = None
             if crop:

@@ -1,5 +1,6 @@
 import nibabel as nib
 import numpy as np
+import pytest
 
 from faceoff import masking
 
@@ -89,3 +90,16 @@ def test_reface_rejects_a_zero_or_negative_median_brain_intensity():
     for subject, reference in [(1, 0), (0, 1), (-0.3, 1), (1, -2)]:
         with pytest.raises(ValueError, match="zero or negative"):
             masking.reface(_img([[[subject]]]), keep, _img([[[reference]]]), brain)
+
+
+def test_reface_handles_a_scan_with_a_length_one_fourth_axis():
+    keep = np.ones((6, 6, 6), np.uint8)
+    keep[:2] = 0  # the removed face
+    ref = np.full((6, 6, 6), 50, np.float32)
+    brain = np.ones((6, 6, 6), np.uint8)
+    subject = np.full((6, 6, 6, 1), 10, np.float32)
+    subject[:2] = 0
+    refaced, scale = masking.reface(_img(subject), _img(keep), _img(ref), _img(brain), None)
+    assert refaced.shape == (6, 6, 6, 1)
+    assert scale == pytest.approx(0.2)
+    np.testing.assert_allclose(np.asanyarray(refaced.dataobj), 10, rtol=1e-6)

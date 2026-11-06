@@ -371,14 +371,6 @@ def test_reface_refuses_a_4d_scan_before_writing_anything(tmp_path, template):
     deface.check_inputs([ScanToDeface(subject)], deface.Options(threads=1, template=template))
 
 
-def test_an_unreadable_scan_is_a_clear_error_when_refacing(tmp_path, template):
-    broken = tmp_path / "t1.nii.gz"
-    broken.write_bytes(b"")
-    options = deface.Options(threads=1, reface=True, template=template)
-    with pytest.raises(ValueError, match="cannot be read as a NIfTI image"):
-        deface.check_inputs([ScanToDeface(broken)], options)
-
-
 def test_an_extra_image_the_face_mask_misses_is_refused_and_nothing_is_written(tmp_path, template):
     subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
     far = np.eye(4)
@@ -391,3 +383,15 @@ def test_an_extra_image_the_face_mask_misses_is_refused_and_nothing_is_written(t
         "inv1.nii.gz",
         "t1.nii.gz",
     ]
+
+
+def test_a_crop_that_would_remove_every_slice_is_found_before_anything_is_written(
+    tmp_path, template
+):
+    high = np.eye(4)
+    high[2, 3] = 1000  # all slices lie above the crop range
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16), high)
+    options = deface.Options(threads=1, template=template)
+    with pytest.raises(ValueError, match="remove every slice"):
+        deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
+    assert [path.name for path in tmp_path.glob("t1_*")] == []

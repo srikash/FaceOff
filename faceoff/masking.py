@@ -91,6 +91,8 @@ def reface(
     scale = float(numerator / denominator)
     if not np.isfinite(scale):
         raise ValueError("Cannot reface: brain intensity scale is invalid.")
+    extra_axes = (1,) * (subject.ndim - face.ndim)  # a (x, y, z, 1) scan, as in deface()
+    face, ref = face.reshape(face.shape + extra_axes), ref.reshape(ref.shape + extra_axes)
     return _like(defaced, np.where(face, scale * ref, subject)), scale
 
 
