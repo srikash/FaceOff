@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import shutil
+import tempfile
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
@@ -66,7 +67,8 @@ def fetch_missing(
             continue
         url = f"https://zenodo.org/api/records/{ZENODO_RECORD}/files/{name}/content"
         log(f"Downloading template file {name} from Zenodo record {ZENODO_RECORD} ...")
-        partial = target.with_name(target.name + ".part")
+        with tempfile.NamedTemporaryFile(dir=directory, prefix=f".{name}.", delete=False) as temp:
+            partial = Path(temp.name)
         try:
             download(url, partial)
             if md5(partial) != checksum:

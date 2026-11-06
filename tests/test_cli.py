@@ -205,3 +205,24 @@ def test_a_bad_thread_count_in_the_environment_is_refused(tmp_path, runs, monkey
     assert result.exit_code == 2
     assert "ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS" in result.output
     assert runs == []
+
+
+def test_existing_output_requires_overwrite(tmp_path, runs):
+    scan = _scan(tmp_path, "a.nii.gz")
+    output = tmp_path / "a_defaced.nii.gz"
+    output.write_bytes(b"keep")
+    result = CliRunner().invoke(cli_module.cli, ["-i", scan])
+    assert result.exit_code == 2
+    assert output.read_bytes() == b"keep"
+    assert not runs
+    result = CliRunner().invoke(cli_module.cli, ["-i", scan, "--overwrite"])
+    assert result.exit_code == 0
+    assert runs[0][1].overwrite
+
+
+def test_overwrite_never_replaces_an_input(tmp_path, runs):
+    scan = _scan(tmp_path, "a.nii.gz")
+    other = _scan(tmp_path, "a_defaced.nii.gz")
+    result = CliRunner().invoke(cli_module.cli, ["--batch", scan, other, "--overwrite"])
+    assert result.exit_code == 2
+    assert not runs

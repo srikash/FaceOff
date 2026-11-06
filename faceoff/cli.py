@@ -52,7 +52,7 @@ rich_click_config.OPTION_GROUPS = {
         },
         {
             "name": "Outputs",
-            "options": ["--reorient", "--crop", "--reface", "--enucleate", "--renucleate", "--qc"],
+            "options": ["--reorient", "--crop", "--reface", "--enucleate", "--renucleate", "--qc", "--overwrite"],
             "title_style": "bold",
         },
         {"name": "How ANTs runs", "options": ["--engine", "--sif"], "title_style": "bold"},
@@ -306,6 +306,7 @@ def _deface_with_timer(scan: ScanToDeface, options: deface.Options) -> None:
     help="An Apptainer image file of ANTs to use, for example from apptainer pull. Implies "
     "--engine apptainer.",
 )
+@click.option("--overwrite", is_flag=True, help="Replace existing output files.")
 @click.option("-d", "depad", is_flag=True, hidden=True, help="Deprecated; ignored.")
 @click.version_option(package_version(), "--version", prog_name="faceoff")
 @click.pass_context
@@ -325,6 +326,7 @@ def cli(
     engine: str | None,
     sif: Path | None,
     depad: bool,
+    overwrite: bool,
 ) -> None:
     """Deface one scan, or several with --batch."""
     if (input_file is None) == (batch is None):
@@ -345,6 +347,12 @@ def cli(
     try:
         container = Container(engine or "apptainer", sif) if engine or sif else Container.default()
         scans = scans_to_deface(files, extras)
+        if not scans:
+            raise ValueError("Give at least one scan.")
+        options = deface.Options(threads=threads or 1, syn=syn, reorient=reorient, crop=crop,
+                                 reface=reface, enucleate=enucleate, renucleate=renucleate,
+                                 qc=qc, container=container, overwrite=overwrite)
+        deface.check_outputs(scans, options)
         threads = ants_threads(threads)
     except ValueError as problem:  # InputError, or a container choice that does not fit
         raise click.UsageError(str(problem)) from problem
@@ -361,7 +369,7 @@ def cli(
 
     options = deface.Options(
         threads=threads, syn=syn, reorient=reorient, crop=crop, reface=reface,
-        enucleate=enucleate, renucleate=renucleate, qc=qc, container=container,
+        enucleate=enucleate, renucleate=renucleate, qc=qc, container=container, overwrite=overwrite,
     )
     if len(scans) > 1:
         quote("This is turning into a real marriage.", "Face/Off (1997)")

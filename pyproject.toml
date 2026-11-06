@@ -8,7 +8,7 @@ version = "1.9.5"
 description = "MRI defacing tool using ANTs registration (your own install, Docker, or Apptainer) to an MNI152 template"
 readme = "README.md"
 license = "MIT"
-license-files = ["LICENSE"]
+license-files = ["LICENCE"]
 requires-python = ">=3.12"
 dependencies = [
     "click>=8.1,<9",

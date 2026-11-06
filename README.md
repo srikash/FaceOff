@@ -1,4 +1,4 @@
-# FaceOff [![Version](https://img.shields.io/badge/version-1.9.5-purple.svg)](https://github.com/srikash/FaceOff/releases/tag/v1.9.5) [![Licence](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE) [![DOI](https://zenodo.org/badge/307797054.svg)](https://zenodo.org/badge/latestdoi/307797054)
+# FaceOff [![Version](https://img.shields.io/badge/version-1.9.5-purple.svg)](https://github.com/srikash/FaceOff/releases/tag/v1.9.5) [![Licence](https://img.shields.io/badge/license-MIT-orange.svg)](LICENCE) [![DOI](https://zenodo.org/badge/307797054.svg)](https://zenodo.org/badge/latestdoi/307797054)
 
 Deface anatomical MRI scans with ANTs. FaceOff removes the face, and the eyes if you ask, and can put the template's face and eyes back.
 

@@ -75,7 +75,15 @@ def reface(
     brain = np.asanyarray(template_brain.dataobj) > 0
     removed = np.asanyarray(keep.dataobj) == 0
     face = removed if fill is None else np.asanyarray(fill.dataobj) != 0
-    scale = float(np.median(subject[brain & ~removed]) / np.median(ref[brain]))
+    subject_values = subject[brain & ~removed]
+    reference_values = ref[brain]
+    if not subject_values.size or not reference_values.size:
+        raise ValueError("Cannot reface: the brain region is empty.")
+    denominator = np.median(reference_values)
+    numerator = np.median(subject_values)
+    if not np.isfinite(numerator) or not np.isfinite(denominator) or denominator == 0:
+        raise ValueError("Cannot reface: brain intensities are invalid.")
+    scale = float(numerator / denominator)
     return _like(defaced, np.where(face, scale * ref, subject)), scale
 
 

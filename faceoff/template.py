@@ -90,11 +90,11 @@ class Template:
 def _default_template(override: str | None, cache_home: str | None) -> Template:
     """Find the template folder (see Template.default); remembered for the rest of the run."""
     if override:
-        return Template(Path(override))
+        return Template(Path(override).resolve())
     if is_complete(_BUNDLED_DIR):
         return Template(_BUNDLED_DIR)
     cache_dir = Path(cache_home) if cache_home else Path.home() / ".cache"
-    return Template(cache_dir / "faceoff" / f"zenodo-{ZENODO_RECORD}")
+    return Template((cache_dir / "faceoff" / f"zenodo-{ZENODO_RECORD}").resolve())
 
 
 def ensure_template(log: Callable[[str], None] = lambda message: None) -> None:

@@ -49,6 +49,7 @@ class Options:
     # How ANTs is run: your own install if its tools are on your PATH, otherwise Docker (or
     # Apptainer/Singularity when chosen).
     container: Container = field(default_factory=Container.default)
+    overwrite: bool = False
 
     @property
     def regions(self) -> Regions:
@@ -120,6 +121,19 @@ class Outputs:
             elif isinstance(value, tuple):
                 paths.extend(value)
         return paths
+
+
+def check_outputs(scans: list[ScanToDeface], options: Options) -> None:
+    """Reject conflicting outputs before processing any scan."""
+    inputs = {path.resolve() for scan in scans for path in (scan.scan, *scan.extra_images)}
+    outputs = [path for scan in scans for path in
+               Outputs.for_input(scan.scan, list(scan.extra_images), options).written()]
+    resolved = [path.resolve() for path in outputs]
+    if inputs.intersection(resolved) or len(set(resolved)) != len(resolved):
+        raise ValueError("Output paths conflict with inputs or other outputs.")
+    existing = [str(path) for path in outputs if path.exists() or path.is_symlink()]
+    if existing and not options.overwrite:
+        raise ValueError("Outputs already exist; use --overwrite: " + ", ".join(existing))
 
 
 class Reporter:
@@ -195,6 +209,7 @@ def run(
     `registration` registers the scan to the template: ANTs by default. The tests pass a
     stand-in that moves template images with a known affine.
     """
+    check_outputs([scan], options)
     template = options.template
     subject, extras = scan.scan, list(scan.extra_images)
     reporter = reporter or Reporter()

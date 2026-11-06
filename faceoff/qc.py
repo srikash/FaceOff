@@ -117,8 +117,6 @@ def _sweep_gif(panels: list[_Panel]) -> tuple[str, int]:
     bright = np.zeros(shape, bool)
     for (volume, _), part in zip(volumes, parts):
         bright |= volume > 0.3 * top
-        if part is not None:
-            bright |= part & (volume > 0.3 * top)
     xs = _extent(bright.sum(axis=(1, 2)), shape[1] * shape[2], 0.0046)
     ys = _extent(bright.sum(axis=(0, 2)), shape[0] * shape[2], 0.0008)
     zs = _extent(bright.sum(axis=(0, 1)), shape[0] * shape[1], 0.0008)
