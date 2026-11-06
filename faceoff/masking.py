@@ -51,7 +51,7 @@ def deface(subject: nib.Nifti1Image, keep: nib.Nifti1Image) -> nib.Nifti1Image:
     mask = mask.reshape(mask.shape + (1,) * (data.ndim - mask.ndim))
     if data.dtype != subject.get_data_dtype():  # rescaled on disk: keep the old float32 output
         return _like(subject, np.where(mask, data, 0))
-    header = subject.header.copy()
+    header = _scrubbed(subject.header)
     header.set_slope_inter(None, None)  # values are stored as they are; no rescaling
     return nib.Nifti1Image(np.where(mask, data, 0), subject.affine, header)
 
@@ -96,8 +96,19 @@ def reface(
     return _like(defaced, np.where(face, scale * ref, subject)), scale
 
 
+def _scrubbed(header: nib.Nifti1Header) -> nib.Nifti1Header:
+    """Return a copy of the header without its free-text fields and extensions, which scanners
+    and converters sometimes fill with names, dates or a whole DICOM header. This clears those
+    fields only; it does not make a file anonymous (see docs/usage.md)."""
+    header = nib.Nifti1Header.from_header(header)  # also turns a NIfTI-2 header into NIfTI-1
+    for field in ("descrip", "aux_file", "db_name", "intent_name"):
+        header[field] = b""
+    header.extensions = nib.nifti1.Nifti1Extensions()
+    return header
+
+
 def _like(image: nib.Nifti1Image, data: np.ndarray) -> nib.Nifti1Image:
     """Return `data` as a float32 NIfTI with the same header and affine as `image`."""
-    header = image.header.copy()
+    header = _scrubbed(image.header)
     header.set_data_dtype(np.float32)
     return nib.Nifti1Image(data.astype(np.float32, copy=False), image.affine, header)

@@ -1,3 +1,6 @@
+import gzip
+import struct
+
 import nibabel as nib
 import numpy as np
 import pytest
@@ -103,3 +106,34 @@ def test_reface_handles_a_scan_with_a_length_one_fourth_axis():
     assert refaced.shape == (6, 6, 6, 1)
     assert scale == pytest.approx(0.2)
     np.testing.assert_allclose(np.asanyarray(refaced.dataobj), 10, rtol=1e-6)
+
+
+def _dirty_scan(data):
+    scan = nib.Nifti1Image(data, np.eye(4))
+    scan.header["descrip"] = b"PATIENT NAME"
+    scan.header["aux_file"] = b"visit-3"
+    scan.header.extensions.append(nib.nifti1.Nifti1Extension(6, b"comment with a name"))
+    return scan
+
+
+def _assert_clean(path):
+    reloaded = nib.load(path)
+    assert reloaded.header["descrip"] == b"" and reloaded.header["aux_file"] == b""
+    assert len(reloaded.header.extensions) == 0
+    with gzip.open(path) as raw:  # vox_offset sits at byte 108; no extension means 352
+        assert struct.unpack("<f", raw.read(112)[108:112])[0] == 352
+
+
+def test_the_free_text_header_fields_and_extensions_are_cleared(tmp_path):
+    data = np.arange(8, dtype=np.int16).reshape(2, 2, 2)
+    keep = _img(np.ones((2, 2, 2)))
+    defaced = masking.deface(_dirty_scan(data), keep)
+    nib.save(defaced, tmp_path / "defaced.nii.gz")
+    _assert_clean(tmp_path / "defaced.nii.gz")
+    np.testing.assert_array_equal(
+        np.asanyarray(nib.load(tmp_path / "defaced.nii.gz").dataobj), data
+    )
+    ref = _img(np.full((2, 2, 2), 5))
+    refaced, _ = masking.reface(_dirty_scan(data.astype(np.float32) + 1), keep, ref, keep)
+    nib.save(refaced, tmp_path / "refaced.nii.gz")
+    _assert_clean(tmp_path / "refaced.nii.gz")

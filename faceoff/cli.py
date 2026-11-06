@@ -296,7 +296,8 @@ def _deface_with_timer(scan: ScanToDeface, options: deface.Options) -> None:
 @click.option(
     "--reface",
     is_flag=True,
-    help="Also write a refaced scan, with the template's face in place of the removed one. "
+    help="Also write a refaced scan, with the template's face in place of the removed one "
+    "(3D scans only). "
     "Add --renucleate to put the template's eyes back too.",
 )
 @click.option(

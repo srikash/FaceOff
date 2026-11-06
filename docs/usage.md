@@ -12,11 +12,11 @@ Input files must be `.nii` or `.nii.gz`. Outputs are written next to the input f
 | `-n`, `--threads N` | How many CPU threads ANTs may use. The default is `ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS` if you have set it, otherwise every core. |
 | `--reorient` / `--no-reorient` | Write the defaced scan and its deface mask in template orientation (the default). With `--no-reorient` you still get the transform files, but no reoriented images. |
 | `--crop` / `--no-crop` | Trim the reoriented images to z from -100 to 125 mm in template space (the default). Whole slices are dropped, and nothing is resampled. |
-| `--reface` | Also write a refaced image, with the template's face filling the removed region. |
+| `--reface` | Also write a refaced image, with the template's face filling the removed region. It needs a 3D scan (a 4D scan is refused). |
 | `--enucleate` | Also remove the eyes, using the template's eye mask, moved onto your scan with a nonlinear registration over the face. They are zeroed in `_defaced` and in the deface mask. With `--reface`, the template's eyes are put back too, exactly as `--renucleate` does. |
 | `--renucleate` | Like `--reface`, for the eyes: also write a refaced image with the template's eyes in place of the removed ones. It implies `--enucleate`. With `--reface` as well, the face and the eyes both come from the template, which is the same as `--reface --enucleate`; without `--reface`, the face stays removed. |
 | `--qc` / `--no-qc` | Write a QC page, `scan_faceoff_qc.html` (the default; `--no-qc` skips it). It holds a GIF that sweeps through the sagittal slices of the defaced scan, and of the refaced scan too when `--reface` or `--renucleate` writes one. Each extra image gets its own GIF. It shows the eyes removed or put back as the other options say. The original scan is not shown. |
-| `--overwrite` | Replace existing output files. Inputs are never overwritten. |
+| `--overwrite` | Replace existing output files. Inputs are never overwritten. Files from an earlier run that this run does not write, such as an old `_refaced` image, are left in place and named in a warning, because they no longer match the new outputs. |
 | `--syn` | Not required, and included for completeness. Adds a slower nonlinear registration, first over the whole head and then over the brain, and moves the face mask with it. The default affine registration already gives almost the same mask. The eyes always use the nonlinear registration over the face, with or without `--syn`. |
 | `--engine local` / `docker` / `apptainer` | Where ANTs runs. By default FaceOff uses your own ANTs if its tools are on your PATH, and otherwise Docker. Apptainer falls back to the `singularity` command. See [installation](installation.md). |
 | `--sif FILE` | An Apptainer image file of ANTs to use, for example one you made with `apptainer pull`. Implies `--engine apptainer`. |
@@ -24,6 +24,16 @@ Input files must be `.nii` or `.nii.gz`. Outputs are written next to the input f
 | `-h`, `--help` | Show the options and a short usage guide. |
 
 Reorientation changes only the image header. No voxel values are resampled or interpolated.
+
+## What FaceOff refuses or warns about
+
+FaceOff works everything out before it writes any file, so a refusal leaves nothing half-written.
+
+- **Refused:** a scan or extra image that is not a readable NIfTI image; `--reface` or `--renucleate` with a 4D scan; an extra image the face mask misses (its field of view may not include the face, or it is not in the same space as `-i`); a registration that mirrors the scan; refacing when the median brain intensity is zero or negative, as can happen with MP2RAGE UNI; a crop that would remove every slice.
+- **Warned about:** a registration that stretches the template by less than 0.7 or more than 1.4 times along an axis, which is unusual for an adult head (check the deface mask on the QC page); output files left over from an earlier run.
+- **QC page:** a failed QC page never stops the defacing. Under `--overwrite` the old page is removed, so it cannot be mistaken for this run's.
+- **Headers:** the outputs have the NIfTI header fields `descrip`, `aux_file`, `db_name` and `intent_name` cleared and no header extensions, because scanners and converters sometimes put names or dates there. This is not anonymisation: file names, JSON sidecars, the original scan beside the outputs, and the shape of the head and ears are not touched, and anonymising your data remains your responsibility.
+- **File format:** NIfTI-1 and NIfTI-2 inputs are read; outputs are NIfTI-1.
 
 Both `--batch` and `--extra-images` take file names separated by commas, spaces, or both, so a wildcard such as `sub-*_T1w.nii.gz` works.
 
