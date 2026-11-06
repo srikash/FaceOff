@@ -126,24 +126,4 @@ BibTeX:
 }
 ```
 
-**Optional: the B-spline regularisation of the SyN registration**
-
-APA:
-
-> Tustison, N. J., & Avants, B. B. (2013). Explicit B-spline regularization in diffeomorphic image registration. *Frontiers in Neuroinformatics, 7*, Article 39. https://doi.org/10.3389/fninf.2013.00039
-
-BibTeX:
-
-```bibtex
-@article{tustison2013explicit,
-  author  = {Tustison, Nicholas J. and Avants, Brian B.},
-  title   = {Explicit {B}-spline regularization in diffeomorphic image registration},
-  journal = {Frontiers in Neuroinformatics},
-  year    = {2013},
-  volume  = {7},
-  pages   = {39},
-  doi     = {10.3389/fninf.2013.00039},
-}
-```
-
 [Back to the README](../README.md)
