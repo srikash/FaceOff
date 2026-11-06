@@ -388,7 +388,11 @@ def cli(
             "--batch; for other images of the same scan, use --extra-images."
         )
     extras = _split_names([*extra_images, *context.args]) if extra_images else ()
-    files = _split_names([batch, *context.args]) if batch is not None else (input_file,)
+    files = (
+        _split_names([batch, *context.args])
+        if batch is not None
+        else ((input_file,) if input_file is not None else ())
+    )
     # Every file and number is checked here, before the banner, ANTs, or the template, and
     # every problem is listed at once.
     try:

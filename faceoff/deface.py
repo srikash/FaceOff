@@ -12,6 +12,7 @@ import numpy as np
 
 from . import masking, qc
 from .ants import Container
+from .images import load_image
 from .inputs import ScanToDeface, strip_extension
 from .regions import Regions
 from .registration import Stage, Transforms, register
@@ -185,10 +186,10 @@ def _warp_masks(
     face = ws.path(f"face_mask_in_{label}.nii.gz")
     tx.to_subject(template.face_mask, face, regions.face_mask_stage, reference=reference)
     if not regions.removes_eyes:
-        return nib.load(face), None
+        return load_image(face), None
     eyes = ws.path(f"eye_mask_in_{label}.nii.gz")
     tx.to_subject(template.eye_mask, eyes, regions.eye_mask_stage, reference=reference)
-    return nib.load(face), nib.load(eyes)
+    return load_image(face), load_image(eyes)
 
 
 def register_with_ants(ws: Workspace, subject: Path, options: Options) -> Transforms:
@@ -233,7 +234,7 @@ def run(
         nib.save(keep, outputs.deface_mask)
         reporter.step("deface mask")
 
-        defaced = masking.deface(nib.load(subject), keep)
+        defaced = masking.deface(load_image(subject), keep)
         nib.save(defaced, outputs.defaced)
         reporter.step("face taken… off")
 
@@ -243,7 +244,7 @@ def run(
         for n, (extra, target) in enumerate(zip(extras, outputs.extra_defaced, strict=True)):
             extra_face, extra_eyes = _warp_masks(tx, ws, template, regions, f"extra{n}", extra)
             extra_keep = masking.keep_mask(extra_face, extra_eyes)
-            nib.save(masking.deface(nib.load(extra), extra_keep), target)
+            nib.save(masking.deface(load_image(extra), extra_keep), target)
             if outputs.qc:  # the QC page reads the saved file back, one volume at a time
                 qc_extras.append((extra.name, target))
         if extras:
@@ -257,8 +258,9 @@ def run(
             tx.to_subject(template.brain_mask, brain_in_subject, Stage.NONLINEAR_FACE)
             fill = masking.fill_region(face, eyes, regions.fills_face, regions.fills_eyes)
             refaced, scale = masking.reface(
-                defaced, keep, nib.load(ref_in_subject), nib.load(brain_in_subject), fill
+                defaced, keep, load_image(ref_in_subject), load_image(brain_in_subject), fill
             )
+            assert outputs.refaced is not None  # set whenever regions.writes_refaced
             nib.save(refaced, outputs.refaced)
             filled = (("face", regions.fills_face), ("eyes", regions.fills_eyes))
             put_back = " and ".join(part for part, wanted in filled if wanted)
@@ -285,7 +287,7 @@ def run(
                     defaced,
                     refaced,
                     fill,
-                    [(name, nib.load(path)) for name, path in qc_extras],
+                    [(name, load_image(path)) for name, path in qc_extras],
                 )
                 reporter.step("QC page")
             except Exception as problem:  # noqa: BLE001 (any failure here is only a warning)

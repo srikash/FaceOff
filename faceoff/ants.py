@@ -107,7 +107,6 @@ class ApptainerAnts:
         self.executable = executable
 
     def command(self, tool: str, args: Sequence[str | Path]) -> list[str]:
-        # Keep each flag next to its value (the formatter would split them).
         # fmt: off
         cmd = [
             self.executable, "exec",

@@ -13,9 +13,9 @@ from dataclasses import dataclass
 from functools import cache, cached_property
 from pathlib import Path
 
-import nibabel as nib
 import numpy as np
 
+from .images import load_image
 from .template_files import PREFIX, ZENODO_RECORD, fetch_missing, is_complete
 
 # The part of the head, as a world z range in template space (mm, bottom to top), that the
@@ -75,7 +75,7 @@ class Template:
     @cached_property
     def brain_centre_lps(self) -> np.ndarray:
         """The centre of the brain mask, in LPS world coordinates (mm)."""
-        mask = nib.load(self.brain_mask)
+        mask = load_image(self.brain_mask)
         voxel = np.argwhere(np.asanyarray(mask.dataobj) > 0).mean(axis=0)
         ras = mask.affine @ np.append(voxel, 1.0)
         return (ras * np.array([-1.0, -1.0, 1.0, 1.0]))[:3]

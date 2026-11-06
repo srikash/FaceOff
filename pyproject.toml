@@ -19,12 +19,12 @@ dependencies = [
     "pillow>=10",
 ]
 
-[dependency-groups]
-dev = ["mypy", "pytest", "ruff"]
-
 [project.scripts]
 faceoff = "faceoff.cli:cli"
 FaceOff = "faceoff.cli:cli"
+
+[dependency-groups]
+dev = ["mypy>=2", "pytest>=9", "ruff==0.16.6"]  # ruff pinned: its formatter output changes between releases
 
 [tool.hatch.build.targets.wheel]
 packages = ["faceoff"]
@@ -39,3 +39,7 @@ line-length = 100
 
 [tool.mypy]
 exclude = ["testdata/"]  # git-ignored scratch folder
+
+[[tool.mypy.overrides]]
+module = "hatchling.*"  # the build backend, not installed in the development environment
+ignore_missing_imports = true

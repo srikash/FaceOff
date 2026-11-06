@@ -17,6 +17,7 @@ import nibabel as nib
 import numpy as np
 
 from .ants import AntsRunner
+from .images import load_image
 from .scratch import Workspace
 from .template import Template
 
@@ -131,7 +132,7 @@ class Transforms:
     def _grid_of(self, image: Path, output: Path) -> Path:
         """Return `image` itself if it is 3D; for a 4D image (such as several GRE echoes),
         write an empty 3D image on the same grid, because ANTs needs a 3D reference here."""
-        loaded = nib.load(image)
+        loaded = load_image(image)
         if loaded.ndim <= 3:
             return image
         grid = self._ws.path(f"grid_for_{output.name}")
@@ -171,7 +172,6 @@ def register(
     Returns the result, ready to move template images onto the scan.
     """
     init = ws.path("init.mat")
-    # Keep each flag next to its value (the formatter would split them).
     # fmt: off
     ants.run("antsAI", [
         "--dimensionality", "3",
@@ -217,7 +217,6 @@ def register(
 def _common_args(prefix: Path, *, collapse: bool) -> list[str | Path]:
     """Return the antsRegistration settings every step shares. Only transforms are written (no
     warped images)."""
-    # Keep each flag next to its value (the formatter would split them).
     # fmt: off
     return [
         "--verbose", "0",
@@ -236,7 +235,6 @@ def _affine_args(subject: Path, init: Path, prefix: Path, template: Template) ->
     """Return the antsRegistration settings for the rigid and affine steps (brain-masked)."""
     brain_mask = f"[{template.brain_mask},1]"
     mi = f"MI[{template.t1w},{subject},1,32,Regular,0.25]"
-    # Keep each flag next to its value (the formatter would split them).
     # fmt: off
     stage = [
         "--metric", mi,
@@ -245,7 +243,6 @@ def _affine_args(subject: Path, init: Path, prefix: Path, template: Template) ->
         "--smoothing-sigmas", "4x3x2x1vox",
     ]
     # fmt: on
-    # Keep each flag next to its value (the formatter would split them).
     # fmt: off
     return [
         *_common_args(prefix, collapse=True),
@@ -270,7 +267,6 @@ def _syn_args(
     initial: list[str | Path] = []
     for transform in start:
         initial += ["--initial-moving-transform", transform]
-    # Keep each flag next to its value (the formatter would split them).
     # fmt: off
     return [
         # Collapsing off writes only this step's warp. With it on, ANTs also rewrites the

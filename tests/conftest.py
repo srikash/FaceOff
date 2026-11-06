@@ -7,6 +7,7 @@ import nibabel as nib
 import numpy as np
 import pytest
 
+from faceoff.images import load_image
 from faceoff.registration import Stage
 from faceoff.template import Template
 
@@ -76,8 +77,9 @@ class StandInRegistration:
         self, template_image, output, stage, interpolation="GenericLabel", reference=None
     ) -> None:
         self.moved.append((Path(template_image).name, stage))
-        grid = nib.load(reference or self._subject)
-        source = nib.load(template_image)
+        assert self._subject is not None
+        grid = load_image(reference or self._subject)
+        source = load_image(template_image)
         data = np.asanyarray(source.dataobj)
         mapping = self.per_stage.get(stage, np.eye(4)) @ self.template_to_scan
         shape = grid.shape[:3]

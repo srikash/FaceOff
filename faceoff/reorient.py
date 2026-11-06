@@ -15,6 +15,7 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 
+from .images import load_image
 from .template import Template
 
 _LPS_FLIP = np.diag([-1.0, -1.0, 1.0, 1.0])
@@ -72,7 +73,7 @@ class TalReorientation:
             "Transform: AffineTransform_double_3_3\n"
             f"Parameters: {params}\nFixedParameters: 0 0 0\n"
         )
-        flirt = _itk_to_flirt(self.rigid_lps, nib.load(source), nib.load(self.template.t1w))
+        flirt = _itk_to_flirt(self.rigid_lps, load_image(source), load_image(self.template.t1w))
         fsl_out.write_text("".join(" ".join(f"{v:.10f}" for v in row) + "\n" for row in flirt))
 
     def write_images(
@@ -90,7 +91,7 @@ class TalReorientation:
         crops: dict[tuple, Crop] = {}
         results: list[Crop | None] = []
         for source, target in sources_and_targets:
-            image = nib.load(source)
+            image = load_image(source)
             affine = _LPS_FLIP @ np.linalg.inv(self.rigid_lps) @ _LPS_FLIP @ image.affine
             data = np.asanyarray(image.dataobj)
             cropped = None

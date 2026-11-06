@@ -11,6 +11,7 @@ Building the package downloads the template files from Zenodo once, into `faceof
 
 ```
 faceoff/cli.py          the faceoff command and its help screen
+faceoff/images.py       reads NIfTI files (NIfTI-1 and NIfTI-2)
 faceoff/inputs.py       checks every scan, extra image, and the thread count before anything runs
 faceoff/deface.py       defaces one scan from start to finish
 faceoff/regions.py      what happens to the face and eyes, worked out once from the flags

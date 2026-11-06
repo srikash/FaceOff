@@ -91,8 +91,8 @@ def _ras(image: nib.Nifti1Image) -> tuple[np.ndarray, tuple[float, float, float]
         image = image.slicer[..., 0]
     canonical = nib.as_closest_canonical(image)
     data = np.asarray(canonical.dataobj, dtype=np.float32)
-    zooms = tuple(float(z) for z in canonical.header.get_zooms()[:3])
-    return data, zooms
+    x, y, z = (float(zoom) for zoom in canonical.header.get_zooms()[:3])
+    return data, (x, y, z)
 
 
 def _extent(counts: np.ndarray, area: int, fraction: float) -> np.ndarray:
