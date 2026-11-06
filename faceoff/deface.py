@@ -317,6 +317,12 @@ def run(
                     )
                 masks_by_grid[grid] = masking.keep_mask(extra_face, extra_eyes)
             extra_keeps.append(masks_by_grid[grid])
+        # Read and mask the extra images now too: a file that is damaged past its header
+        # must stop the run before the first output is written.
+        extra_defaced = [
+            masking.deface(load_image(extra), extra_keep)
+            for extra, extra_keep in zip(extras, extra_keeps, strict=True)
+        ]
 
         refaced = fill = None
         if regions.writes_refaced:
@@ -335,10 +341,8 @@ def run(
         nib.save(keep, outputs.deface_mask)
         nib.save(defaced, outputs.defaced)
         qc_extras = []
-        for extra, extra_keep, target in zip(
-            extras, extra_keeps, outputs.extra_defaced, strict=True
-        ):
-            nib.save(masking.deface(load_image(extra), extra_keep), target)
+        for extra, image, target in zip(extras, extra_defaced, outputs.extra_defaced, strict=True):
+            nib.save(image, target)
             if outputs.qc:  # the QC page reads the saved file back, one volume at a time
                 qc_extras.append((extra.name, target))
         if refaced is not None:

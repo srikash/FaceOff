@@ -140,7 +140,7 @@ def _crop_slices(
     z = nib.affines.apply_affine(affine, centres)[:, 2]
     keep = np.flatnonzero((z >= z_min) & (z < z_max))
     if keep.size == 0:
-        raise ValueError("Crop would remove every slice.")
+        raise ValueError("Crop would remove every slice (try --no-crop).")
     return Crop(axis, int(keep[0]), int(keep[-1]) + 1, shape[axis])
 
 

@@ -27,12 +27,12 @@ Reorientation changes only the image header. No voxel values are resampled or in
 
 ## What FaceOff refuses or warns about
 
-FaceOff works everything out before it writes any file, so a refusal leaves nothing half-written.
+FaceOff reads, registers and works out every output before it writes the first file, so these refusals leave nothing half-written. (A failure while writing, such as a full disk, can still leave some files.)
 
 - **Refused:** a scan or extra image that is not a readable NIfTI image; `--reface` or `--renucleate` with a 4D scan; an extra image the face mask misses (its field of view may not include the face, or it is not in the same space as `-i`); a registration that mirrors the scan; refacing when the median brain intensity is zero or negative, as can happen with MP2RAGE UNI; a crop that would remove every slice.
 - **Warned about:** a registration that stretches the template by less than 0.7 or more than 1.4 times along an axis, which is unusual for an adult head (check the deface mask on the QC page); output files left over from an earlier run.
 - **QC page:** a failed QC page never stops the defacing. Under `--overwrite` the old page is removed, so it cannot be mistaken for this run's.
-- **Headers:** the outputs have the NIfTI header fields `descrip`, `aux_file`, `db_name` and `intent_name` cleared and no header extensions, because scanners and converters sometimes put names or dates there. This is not anonymisation: file names, JSON sidecars, the original scan beside the outputs, and the shape of the head and ears are not touched, and anonymising your data remains your responsibility.
+- **Headers:** the outputs have the NIfTI header fields `descrip`, `aux_file`, `db_name` and `intent_name` cleared and no header extensions, because scanners and converters sometimes put names or dates there. This also drops harmless metadata kept in those places, such as TE and TR text some converters write to `descrip`, or AFNI extensions. This is not anonymisation: file names, JSON sidecars, the original scan beside the outputs, and the shape of the head and ears are not touched, and anonymising your data remains your responsibility.
 - **File format:** NIfTI-1 and NIfTI-2 inputs are read; outputs are NIfTI-1.
 
 Both `--batch` and `--extra-images` take file names separated by commas, spaces, or both, so a wildcard such as `sub-*_T1w.nii.gz` works.

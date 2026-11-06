@@ -203,7 +203,7 @@ p {{ color:var(--muted) }}
 .figure img {{ display:block; width:100%; border-radius:6px }}
 </style></head><body>
 <h1>FaceOff QC: {escape(title)}</h1>
-<p>Each animation sweeps through the sagittal slices of the head at {FPS} frames per second. Where a refaced image is shown, the part filled from the template is in turbo. Voxels below 5% of the brightest values, and negative values, are drawn black, so faint tissue left behind cannot be seen here. A 4D image shows its first volume only, and the images in one animation share a brightness scale.</p>
+<p>Each animation sweeps through the sagittal slices of the head at {FPS} frames per second. Where a refaced image is shown, the part filled from the template is in turbo. Voxels below 5% of a near-maximum brightness, and negative values, are drawn black, so faint tissue left behind cannot be seen here. A 4D image shows its first volume only, and the images in one animation share a brightness scale.</p>
 {"".join(body)}
 </body></html>
 """,

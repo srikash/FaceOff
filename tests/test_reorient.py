@@ -141,3 +141,12 @@ def test_a_scan_tilted_by_a_known_angle_comes_out_square_to_the_template(tmp_pat
     out = nib.load(tmp_path / "tal.nii.gz")
     np.testing.assert_allclose(out.affine, voxels, atol=1e-6)  # header is stored as float32
     assert np.array_equal(np.asanyarray(out.dataobj), data)
+
+
+def test_a_non_finite_affine_is_refused():
+    import pytest
+
+    affine = np.eye(4)
+    affine[0, 0] = np.nan
+    with pytest.raises(ValueError, match="not finite"):
+        TalReorientation.from_affine_matrix(affine, Template(Path("unused")), np.zeros(3))

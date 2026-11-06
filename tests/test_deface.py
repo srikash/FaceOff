@@ -470,3 +470,38 @@ def test_extra_images_on_the_inputs_grid_share_its_mask_and_others_get_their_own
         np.asanyarray(nib.load(outputs.extra_defaced[0]).dataobj)[:, :, :] == 0,
         np.asanyarray(nib.load(outputs.defaced).dataobj) == 0,
     )
+
+
+def test_an_extra_image_damaged_past_its_header_stops_the_run_before_any_output(tmp_path, template):
+    subject = _save(tmp_path / "uni.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    extra = _save(tmp_path / "inv1.nii", np.arange(120, dtype=np.int16).reshape(6, 5, 4))
+    extra.write_bytes(extra.read_bytes()[:-40])  # header intact, data cut short
+    options = deface.Options(threads=1, crop=False, template=template)
+    with pytest.raises(OSError, match="damaged"):
+        deface.run(ScanToDeface(subject, (extra,)), options, registration=StandInRegistration())
+    assert [path.name for path in tmp_path.glob("uni_*")] == []
+
+
+def test_a_crop_that_would_remove_every_slice_of_an_extra_image_is_found_first(tmp_path, template):
+    subject = _save(tmp_path / "uni.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    high = np.eye(4)
+    high[2, 3] = 1000
+    extra = _save(tmp_path / "inv1.nii.gz", np.full((6, 5, 4), 3, np.int16), high)
+    options = deface.Options(threads=1, template=template)
+    with pytest.raises(ValueError, match="remove every slice"):
+        deface.run(ScanToDeface(subject, (extra,)), options, registration=StandInRegistration())
+    assert [path.name for path in tmp_path.glob("uni_*")] == []
+
+
+def test_extra_images_on_a_grid_that_differs_only_in_voxel_size_or_codes_get_own_masks(
+    tmp_path, template
+):
+    subject = _save(tmp_path / "uni.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    coded = nib.Nifti1Image(np.full((6, 5, 4), 3, np.int16), np.eye(4))
+    coded.set_sform(np.eye(4), code=4)  # same affine, other sform code
+    coded_path = tmp_path / "inv1.nii.gz"
+    nib.save(coded, coded_path)
+    registration = StandInRegistration()
+    options = deface.Options(threads=1, crop=False, qc=False, template=template)
+    deface.run(ScanToDeface(subject, (coded_path,)), options, registration=registration)
+    assert len([n for n, _ in registration.moved if "face_mask" in n]) == 2
