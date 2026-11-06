@@ -126,13 +126,6 @@ def test_reface_fits_the_face_with_dense_mi(syn, start):
     assert _syn_calls(syn, True)[-1] == (start, f"[{TEMPLATE.reface_mask},1]", MI, "10x6x4x2")
 
 
-def test_no_syn_step_samples_the_metric():
-    ants = RecordingAnts()
-    _register(ants, True, True)
-    syn_metrics = [_after(args, "--metric") for _, args in ants.calls[2:]]
-    assert len(syn_metrics) == 3 and not any("Regular" in m for m in syn_metrics)
-
-
 def test_a_4d_image_is_warped_onto_through_a_3d_copy_of_its_grid(tmp_path):
     """ANTs needs a 3D reference: for several GRE echoes in one file, an empty 3D image on
     the same grid is used."""

@@ -18,7 +18,7 @@ def keep_mask(
     remove = np.asanyarray(face_mask_in_subject.dataobj) != 0
     if eye_mask_in_subject is not None:
         remove |= np.asanyarray(eye_mask_in_subject.dataobj) != 0
-    return _like(face_mask_in_subject, (~remove).astype(np.float32))
+    return _like(face_mask_in_subject, ~remove)
 
 
 def fill_region(
@@ -34,7 +34,7 @@ def fill_region(
         fill |= np.asanyarray(face_mask_in_subject.dataobj) != 0
     if eyes and eye_mask_in_subject is not None:
         fill |= np.asanyarray(eye_mask_in_subject.dataobj) != 0
-    return _like(face_mask_in_subject, fill.astype(np.float32))
+    return _like(face_mask_in_subject, fill)
 
 
 def deface(subject: nib.Nifti1Image, keep: nib.Nifti1Image) -> nib.Nifti1Image:
@@ -93,4 +93,4 @@ def _like(image: nib.Nifti1Image, data: np.ndarray) -> nib.Nifti1Image:
     """Return `data` as a float32 NIfTI with the same header and affine as `image`."""
     header = image.header.copy()
     header.set_data_dtype(np.float32)
-    return nib.Nifti1Image(data.astype(np.float32), image.affine, header)
+    return nib.Nifti1Image(data.astype(np.float32, copy=False), image.affine, header)

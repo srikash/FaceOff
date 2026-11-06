@@ -31,6 +31,12 @@ class AntsError(RuntimeError):
     """An ANTs tool exited with an error."""
 
 
+def _run(tool: str, command: list[str], env: dict[str, str] | None = None) -> None:
+    returncode = subprocess.run(command, env=env, check=False).returncode
+    if returncode:
+        raise AntsError(f"{tool} failed (exit code {returncode}).")
+
+
 class AntsRunner(Protocol):
     """Anything that can run an ANTs tool (DockerAnts for real runs, RecordingAnts in tests)."""
 
@@ -52,9 +58,7 @@ class LocalAnts:
     def run(self, tool: str, args: Sequence[str | Path]) -> None:
         """Run `tool` with `args`. Raises AntsError if it fails."""
         env = {**os.environ, "ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS": str(self.threads)}
-        returncode = subprocess.run(self.command(tool, args), env=env).returncode
-        if returncode != 0:
-            raise AntsError(f"{tool} failed (exit code {returncode}).")
+        _run(tool, self.command(tool, args), env)
 
 
 class DockerAnts:
@@ -86,9 +90,7 @@ class DockerAnts:
 
     def run(self, tool: str, args: Sequence[str | Path]) -> None:
         """Run `tool` with `args` in Docker. Raises AntsError if it fails."""
-        returncode = subprocess.run(self.command(tool, args)).returncode
-        if returncode != 0:
-            raise AntsError(f"{tool} failed (exit code {returncode}).")
+        _run(tool, self.command(tool, args))
 
 
 class ApptainerAnts:
@@ -119,9 +121,7 @@ class ApptainerAnts:
 
     def run(self, tool: str, args: Sequence[str | Path]) -> None:
         """Run `tool` with `args` in Apptainer. Raises AntsError if it fails."""
-        returncode = subprocess.run(self.command(tool, args)).returncode
-        if returncode != 0:
-            raise AntsError(f"{tool} failed (exit code {returncode}).")
+        _run(tool, self.command(tool, args))
 
 
 def _mounts(args: Sequence[str | Path], scratch: Path) -> list[tuple[Path, bool]]:

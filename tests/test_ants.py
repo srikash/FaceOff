@@ -151,3 +151,11 @@ def test_default_container_is_local_when_the_tools_exist_otherwise_docker(monkey
     monkeypatch.setattr(ants_module, "local_ants_available", lambda: False)
     assert Container.default() == Container("docker")
     assert Container() == Container("docker")  # a bare Container() is always Docker
+
+
+@pytest.mark.parametrize("runner", [DockerAnts(1, Path("/tmp/s")),
+                                  ApptainerAnts(1, Path("/tmp/s"), Path("/ants.sif"), "apptainer")])
+def test_container_run_reports_tool_failure(monkeypatch, runner):
+    monkeypatch.setattr(ants_module.subprocess, "run", lambda *args, **kwargs: type("Result", (), {"returncode": 3})())
+    with pytest.raises(AntsError, match="antsRegistration failed \\(exit code 3\\)"):
+        runner.run("antsRegistration", [])

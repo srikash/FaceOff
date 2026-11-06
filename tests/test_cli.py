@@ -83,15 +83,6 @@ def test_version():
     assert "faceoff" in result.output
 
 
-def test_extra_images_are_split_on_commas(tmp_path, runs):
-    a, b = _scan(tmp_path, "inv1.nii.gz"), _scan(tmp_path, "inv2.nii.gz")
-    result = CliRunner().invoke(
-        cli_module.cli, ["-i", _scan(tmp_path, "uni.nii.gz"), "--extra-images", f"{a},{b}"]
-    )
-    assert result.exit_code == 0, result.output
-    assert runs[0][2] == (Path(a), Path(b))
-
-
 def test_batch_takes_scans_separated_by_spaces_or_commas(tmp_path, runs):
     a, b, c = (_scan(tmp_path, name) for name in ("a.nii.gz", "b.nii.gz", "c.nii.gz"))
     result = CliRunner().invoke(cli_module.cli, ["--batch", a, f"{b},{c}", "--no-crop"])

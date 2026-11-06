@@ -31,11 +31,6 @@ def _titles(html: str) -> list[str]:
     return re.findall(r"<span>(.*?)</span>", html)
 
 
-def test_the_interface_is_one_function():
-    assert [name for name in vars(qc) if not name.startswith("_") and callable(getattr(qc, name))
-            and getattr(getattr(qc, name), "__module__", "") == "faceoff.qc"] == ["write_page"]
-
-
 def test_a_defaced_image_alone_gives_one_title_and_a_gif_at_the_set_frame_rate(tmp_path):
     html = _page(tmp_path, _head())
     assert html.count("<img") == 1

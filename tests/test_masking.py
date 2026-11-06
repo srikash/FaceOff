@@ -67,3 +67,13 @@ def test_reface_rejects_empty_brain():
     empty = _img([[[0, 0]]])
     with pytest.raises(ValueError, match="brain region is empty"):
         masking.reface(image, image, image, empty)
+
+
+def test_reface_rejects_invalid_brain_intensities():
+    import pytest
+
+    keep = _img([[[1]]])
+    brain = _img([[[1]]])
+    for subject, reference in [(1, 0), (float("nan"), 1), (1, float("inf"))]:
+        with pytest.raises(ValueError, match="brain intensities are invalid"):
+            masking.reface(_img([[[subject]]]), keep, _img([[[reference]]]), brain)

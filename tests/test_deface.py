@@ -289,3 +289,13 @@ def test_failed_qc_does_not_report_old_page(tmp_path, template, monkeypatch, cap
     assert outputs.qc is None
     assert old_qc.read_text() == "old page"
     assert str(old_qc) not in capsys.readouterr().out
+
+
+def test_overwrite_replaces_existing_output(tmp_path, template):
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    output = tmp_path / "t1_defaced.nii.gz"
+    output.write_bytes(b"previous output")
+    options = deface.Options(threads=1, crop=False, qc=False, overwrite=True, template=template)
+    deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
+    data = np.asanyarray(nib.load(output).dataobj)
+    assert (data[:2] == 0).all() and (data[2:] == 7).all()
