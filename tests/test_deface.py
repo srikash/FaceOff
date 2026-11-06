@@ -349,3 +349,12 @@ def test_overwrite_replaces_existing_output(tmp_path, template):
     deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
     data = np.asanyarray(nib.load(output).dataobj)
     assert (data[:2] == 0).all() and (data[2:] == 7).all()
+
+
+def test_a_mirroring_registration_stops_the_run_before_anything_is_written(tmp_path, template):
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    mirror = np.diag([-1.0, 1.0, 1.0, 1.0])
+    options = deface.Options(threads=1, crop=False, template=template)
+    with pytest.raises(ValueError, match="mirrors the scan"):
+        deface.run(ScanToDeface(subject), options, registration=StandInRegistration(mirror))
+    assert sorted(path.name for path in tmp_path.iterdir() if path.is_file()) == ["t1.nii.gz"]

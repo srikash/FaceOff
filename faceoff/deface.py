@@ -224,31 +224,27 @@ def run(
     with workspace() as ws:
         regions = options.regions
         tx = registration(ws, subject, options)
+        # The reorientation is worked out now, so a registration that cannot be used (see
+        # TalReorientation) stops the run before any file is written.
+        tal = TalReorientation.from_affine_matrix(tx.affine_lps, template)
         reporter.step("registration to the template")
 
-        # The template masks mark the region to remove; the deface mask is its inverse.
+        # Everything is worked out in memory first, so a problem found along the way leaves no
+        # half-written set of files. The template masks mark the region to remove; the deface
+        # mask is its inverse.
         face, eyes = _warp_masks(tx, ws, template, regions, "subject")
         if not np.any(np.asanyarray(face.dataobj)):
             raise ValueError("The face mask is empty; the scan was not defaced.")
         keep = masking.keep_mask(face, eyes)
-        nib.save(keep, outputs.deface_mask)
-        reporter.step("deface mask")
-
         defaced = masking.deface(load_image(subject), keep)
-        nib.save(defaced, outputs.defaced)
-        reporter.step("face taken… off")
+        reporter.step("deface mask")
 
         # Extra images may have their own voxel grid, so the masks are warped onto each
         # one's grid rather than reused; on the input's grid this gives the same mask.
-        qc_extras = []
-        for n, (extra, target) in enumerate(zip(extras, outputs.extra_defaced, strict=True)):
+        extra_keeps = []
+        for n, extra in enumerate(extras):
             extra_face, extra_eyes = _warp_masks(tx, ws, template, regions, f"extra{n}", extra)
-            extra_keep = masking.keep_mask(extra_face, extra_eyes)
-            nib.save(masking.deface(load_image(extra), extra_keep), target)
-            if outputs.qc:  # the QC page reads the saved file back, one volume at a time
-                qc_extras.append((extra.name, target))
-        if extras:
-            reporter.step(f"face taken… off {len(extras)} extra image(s)")
+            extra_keeps.append(masking.keep_mask(extra_face, extra_eyes))
 
         refaced = fill = None
         if regions.writes_refaced:
@@ -260,15 +256,26 @@ def run(
             refaced, scale = masking.reface(
                 defaced, keep, load_image(ref_in_subject), load_image(brain_in_subject), fill
             )
-            assert outputs.refaced is not None  # set whenever regions.writes_refaced
-            nib.save(refaced, outputs.refaced)
             filled = (("face", regions.fills_face), ("eyes", regions.fills_eyes))
             put_back = " and ".join(part for part, wanted in filled if wanted)
             reporter.step(f"template {put_back} inserted (intensity scale {scale:.3g})")
 
+        nib.save(keep, outputs.deface_mask)
+        nib.save(defaced, outputs.defaced)
+        qc_extras = []
+        for extra, extra_keep, target in zip(
+            extras, extra_keeps, outputs.extra_defaced, strict=True
+        ):
+            nib.save(masking.deface(load_image(extra), extra_keep), target)
+            if outputs.qc:  # the QC page reads the saved file back, one volume at a time
+                qc_extras.append((extra.name, target))
+        if refaced is not None:
+            assert outputs.refaced is not None  # set whenever regions.writes_refaced
+            nib.save(refaced, outputs.refaced)
+        reporter.step("face taken… off" + (f" ({len(extras)} extra image(s))" if extras else ""))
+
         # The face is already removed. Save the rotation part of the affine; unless switched
         # off, write the images in template orientation (header only, no resampling).
-        tal = TalReorientation.from_affine_matrix(tx.affine_lps, template)
         tal.write_transforms(subject, outputs.txn_itk, outputs.txn_fsl)
         if options.reorient:
             input_crop = tal.write_images(outputs.tal_pairs(), options.crop)[0]

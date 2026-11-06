@@ -53,6 +53,13 @@ class TalReorientation:
         so the brain ends up in the same place as with the full affine.
         """
         centre = template.brain_centre_lps if centre_lps is None else centre_lps
+        if not np.isfinite(affine_lps).all():
+            raise ValueError("The registration's affine has values that are not finite.")
+        if np.linalg.det(affine_lps[:3, :3]) <= 0:
+            raise ValueError(
+                "The registration's affine mirrors the scan (its determinant is not positive), "
+                "so it cannot be turned into a rotation."
+            )
         left, _, right = np.linalg.svd(affine_lps[:3, :3])
         rotation = left @ right
         rigid = np.eye(4)
