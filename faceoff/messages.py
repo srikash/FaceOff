@@ -24,12 +24,10 @@ def log(message: str) -> None:
 
 
 def success(message: str) -> None:
-    """Print a green tick and `message`."""
     console.print(f"[bold green]✓[/bold green] {message}", soft_wrap=True)
 
 
 def error(message: str) -> None:
-    """Print a red cross and `message`."""
     console.print(f"[bold red]✗[/bold red] {message}", soft_wrap=True)
 
 

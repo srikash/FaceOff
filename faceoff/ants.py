@@ -1,9 +1,9 @@
 """Run ANTs tools: from your own ANTs install, or from the antsx/ants container image.
 
-If the ANTs tools FaceOff needs are on your PATH, `LocalAnts` runs them directly. Otherwise the
-image runs in Docker (`DockerAnts`) or, on clusters without Docker, in Apptainer or
-Singularity (`ApptainerAnts`); `Container` says which. `RecordingAnts` only writes the
-commands down, for the tests. Each folder named in a container command is made visible inside
+`LocalAnts` runs the tools from your own install; `DockerAnts` and `ApptainerAnts` (or
+Singularity) run them from the container image. `Container` says which, and
+`Container.default` how the choice is made. `RecordingAnts` only writes the commands down, for
+the tests. Each folder named in a container command is made visible inside
 the container at the same path, so commands look exactly as they would with a local ANTs. The
 container can only write to the run's temporary folder.
 """
@@ -38,7 +38,8 @@ def _run(tool: str, command: list[str], env: dict[str, str] | None = None) -> No
 
 
 class AntsRunner(Protocol):
-    """Anything that can run an ANTs tool (DockerAnts for real runs, RecordingAnts in tests)."""
+    """Anything that can run an ANTs tool: LocalAnts, DockerAnts or ApptainerAnts for real runs,
+    RecordingAnts in tests."""
 
     def run(self, tool: str, args: Sequence[str | Path]) -> None:
         """Run `tool` (for example "antsRegistration") with `args`. Raises AntsError if it
@@ -52,11 +53,9 @@ class LocalAnts:
         self.threads = threads
 
     def command(self, tool: str, args: Sequence[str | Path]) -> list[str]:
-        """Return the command for one ANTs tool."""
         return [tool, *(str(a) for a in args)]
 
     def run(self, tool: str, args: Sequence[str | Path]) -> None:
-        """Run `tool` with `args`. Raises AntsError if it fails."""
         env = {**os.environ, "ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS": str(self.threads)}
         _run(tool, self.command(tool, args), env)
 
@@ -73,7 +72,6 @@ class DockerAnts:
         self.image = image
 
     def command(self, tool: str, args: Sequence[str | Path]) -> list[str]:
-        """Return the full `docker run` command for one ANTs tool."""
         cmd = [
             "docker", "run", "--rm",
             "--init",  # lets Ctrl-C reach ANTs
@@ -89,7 +87,6 @@ class DockerAnts:
         return [*cmd, self.image, tool, *(str(a) for a in args)]
 
     def run(self, tool: str, args: Sequence[str | Path]) -> None:
-        """Run `tool` with `args` in Docker. Raises AntsError if it fails."""
         _run(tool, self.command(tool, args))
 
 
@@ -107,7 +104,6 @@ class ApptainerAnts:
         self.executable = executable
 
     def command(self, tool: str, args: Sequence[str | Path]) -> list[str]:
-        """Return the full `apptainer exec` command for one ANTs tool."""
         cmd = [
             self.executable, "exec",
             "--containall",  # no home folder, /tmp, or environment from the host
@@ -120,7 +116,6 @@ class ApptainerAnts:
         return [*cmd, str(self.image), tool, *(str(a) for a in args)]
 
     def run(self, tool: str, args: Sequence[str | Path]) -> None:
-        """Run `tool` with `args` in Apptainer. Raises AntsError if it fails."""
         _run(tool, self.command(tool, args))
 
 
@@ -149,15 +144,13 @@ class RecordingAnts:
         self.calls: list[tuple[str, list[str]]] = []
 
     def run(self, tool: str, args: Sequence[str | Path]) -> None:
-        """Note down `tool` and `args` in `calls`."""
         self.calls.append((tool, [str(a) for a in args]))
 
 
 @dataclass(frozen=True)
 class Container:
     """How ANTs is run: in Docker, in Apptainer or Singularity, or from your own ANTs install
-    ("local"). `Container()` is Docker; `Container.default()` is what FaceOff uses when you
-    choose nothing: your own ANTs if its tools are on your PATH, otherwise Docker.
+    ("local"). `Container()` is Docker.
 
     `sif` is an Apptainer image file you already have. Without one, FaceOff downloads the
     ANTs image into a file in your cache folder the first time, and reuses it after that.
@@ -186,7 +179,7 @@ class Container:
         """The image ANTs runs from: the Docker image name, or the Apptainer image file. Local
         ANTs has no image, so this is the folder of its tools."""
         if self.engine == "local":
-            return str(Path(shutil.which(REQUIRED_TOOLS[1]) or REQUIRED_TOOLS[1]).parent)
+            return str(Path(shutil.which("antsRegistration") or "antsRegistration").parent)
         if self.engine == "docker":
             return ANTS_IMAGE
         return str(self.sif or _cached_sif())
@@ -275,7 +268,7 @@ def _cached_sif() -> Path:
     """Where the downloaded Apptainer image is kept: faceoff/ in your cache folder
     ($XDG_CACHE_HOME, usually ~/.cache)."""
     cache = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
-    return Path(cache) / "faceoff" / f"ants-{ANTS_IMAGE.rsplit(':', 1)[1]}.sif"
+    return Path(cache) / "faceoff" / f"ants-{ANTS_VERSION}.sif"
 
 
 def _apptainer_executable() -> str:

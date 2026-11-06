@@ -3,7 +3,8 @@ the scan.
 
 `register` runs the ANTs steps: a centre-of-mass start, rigid, affine, and the SyN steps if
 asked for. The ANTs file names, the flags, and the order in which transforms are applied are
-all kept in this file. The rest of FaceOff only calls `Transforms.to_subject`.
+all kept in this file. The rest of FaceOff uses `Transforms`: `to_subject` to move template
+images onto the scan, and `affine_lps` for the reorientation.
 """
 
 from __future__ import annotations
@@ -54,9 +55,11 @@ _HEAD_SYN = _REFACE_SYN
 _BRAIN_SYN = _SynSchedule(_CC, "[0.1,3,0]", "[50x25,1e-6,10]", "2x1", "1x0vox")
 
 _AFFINE_PREFIX = "affine_"
+_AFFINE_FILE = f"{_AFFINE_PREFIX}0GenericAffine.mat"  # ANTs' name for the affine it writes
 _HEAD_PREFIX = "head_"
 _BRAIN_PREFIX = "brain_"
 _FACE_PREFIX = "face_"
+_SEED = "13"  # the same random seed for every ANTs call, so runs repeat exactly
 
 
 class Transforms:
@@ -84,7 +87,7 @@ class Transforms:
         It moves the scan into template space. As a mapping of coordinates, it takes template
         points to scan points (the ITK convention used throughout this file).
         """
-        return self._ws.path(f"{_AFFINE_PREFIX}0GenericAffine.mat")
+        return self._ws.path(_AFFINE_FILE)
 
     @property
     def affine_lps(self) -> np.ndarray:
@@ -167,7 +170,7 @@ def register(
     init = ws.path("init.mat")
     ants.run("antsAI", [
         "--dimensionality", "3",
-        "--random-seed", "13",
+        "--random-seed", _SEED,
         "--transform", "AlignCentersOfMass",
         "--masks", template.brain_mask,
         "--metric", f"MI[{template.t1w},{subject},32,Regular,0.25]",
@@ -179,11 +182,10 @@ def register(
     # and writes its own warp and inverse warp. They are not merged into one file: the steps
     # end at different resolutions (2 mm and 1 mm warps), which ANTs cannot combine. They are
     # still applied together, in one antsApplyTransforms call (see Transforms.to_subject).
-    # The nonlinear brain registration (--syn) is not required (the affine alone already gives
-    # the deface mask) and is kept for completeness: it fits the whole head with MI, then the
-    # brain with CC. The nonlinear face registration starts from that (or the affine) and is
+    # --syn (not required: the affine alone gives the deface mask) fits the whole head with MI,
+    # then the brain with CC. The face registration starts from that (or the affine) and is
     # fitted over the reface mask.
-    affine = ws.path(f"{_AFFINE_PREFIX}0GenericAffine.mat")
+    affine = ws.path(_AFFINE_FILE)
     forward: list[Path] = []  # warps fitted so far, scan to template, in fitting order
     inverse: list[Path] = []
 
@@ -206,6 +208,21 @@ def register(
     return Transforms(ants, ws, subject, brain_warps, face_warp)
 
 
+def _common_args(prefix: Path, *, collapse: bool) -> list[str | Path]:
+    """Return the antsRegistration settings every step shares. Only transforms are written (no
+    warped images)."""
+    return [
+        "--verbose", "0",
+        "--random-seed", _SEED,
+        "--dimensionality", "3",
+        "--float", "1",
+        "--collapse-output-transforms", str(int(collapse)),
+        "--output", prefix,
+        "--use-histogram-matching", "0",
+        "--winsorize-image-intensities", "[0.005,0.995]",
+    ]
+
+
 def _affine_args(
     subject: Path, init: Path, prefix: Path, template: Template
 ) -> list[str | Path]:
@@ -215,14 +232,7 @@ def _affine_args(
     stage = ["--metric", mi, "--convergence", "[1000x500x250x100,1e-6,10]",
              "--shrink-factors", "12x8x4x2", "--smoothing-sigmas", "4x3x2x1vox"]
     return [
-        "--verbose", "0",
-        "--random-seed", "13",
-        "--dimensionality", "3",
-        "--float", "1",
-        "--collapse-output-transforms", "1",
-        "--output", prefix,  # transforms only: no warped images
-        "--use-histogram-matching", "0",
-        "--winsorize-image-intensities", "[0.005,0.995]",
+        *_common_args(prefix, collapse=True),
         "--initial-moving-transform", init,
         "--masks", brain_mask, "--transform", "Rigid[0.1]", *stage,
         "--masks", brain_mask, "--transform", "Affine[0.1]", *stage,
@@ -244,16 +254,10 @@ def _syn_args(
     for transform in start:
         initial += ["--initial-moving-transform", transform]
     return [
-        "--verbose", "0",
-        "--random-seed", "13",
-        "--dimensionality", "3",
-        "--float", "1",
-        # Write only this step's warp. With collapsing on, ANTs also rewrites the starting
-        # transforms, and fails when a starting warp is on a coarser grid (the 2 mm head warp).
-        "--collapse-output-transforms", "0",
-        "--output", prefix,  # transforms only: no warped images
-        "--use-histogram-matching", "0",
-        "--winsorize-image-intensities", "[0.005,0.995]",
+        # Collapsing off writes only this step's warp. With it on, ANTs also rewrites the
+        # starting transforms, and fails when a starting warp is on a coarser grid (the 2 mm
+        # head warp).
+        *_common_args(prefix, collapse=False),
         *(["--masks", f"[{mask},1]"] if mask else []),
         *initial,
         "--transform", f"SyN{schedule.step}",

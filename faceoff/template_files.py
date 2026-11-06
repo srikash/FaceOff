@@ -27,7 +27,6 @@ TEMPLATE_FILES = {
 
 
 def md5(path: Path) -> str:
-    """Return the md5 checksum of a file."""
     digest = hashlib.md5()
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1 << 20), b""):
@@ -41,12 +40,10 @@ def is_complete(directory: Path) -> bool:
 
 
 def _valid(path: Path, checksum: str) -> bool:
-    """Return True when `path` exists and has the expected checksum."""
     return path.is_file() and md5(path) == checksum
 
 
 def _download(url: str, dest: Path) -> None:
-    """Download `url` to `dest`."""
     with urllib.request.urlopen(url, timeout=60) as response, dest.open("wb") as out:
         shutil.copyfileobj(response, out)
 

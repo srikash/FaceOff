@@ -25,30 +25,21 @@ class Options:
     """The choices for one run. The defaults are the same as the command line's."""
 
     threads: int
-    # Not required: the affine alone already gives the deface mask. Kept for completeness.
     syn: bool = False
     # Also write the outputs in template orientation (header change only).
     reorient: bool = True
     # Trim those template-orientation outputs to the z range TEMPLATE_CROP_Z_MM. Does nothing
     # without reorient.
     crop: bool = True
-    # Also write a copy with the template's face put in place of the removed one.
+    # How reface, enucleate and renucleate combine: see Regions.
     reface: bool = False
-    # Remove the eyes as well as the face (they are zeroed in the defaced images and the
-    # deface mask).
     enucleate: bool = False
-    # Also put the template's eyes in place of the removed ones (like reface, for the eyes).
-    # This removes the eyes too, so it implies enucleate. With reface, the refaced image gets
-    # both the face and the eyes; without it, the face stays removed there. Reface together
-    # with enucleate already puts the eyes back, so renucleate is then redundant.
     renucleate: bool = False
     # Also write a QC page (name_faceoff_qc.html): a GIF of the defaced (and refaced) scan for
     # each image.
     qc: bool = True
     # The template to register to; the tests pass a small synthetic one.
     template: Template = field(default_factory=Template.default)
-    # How ANTs is run: your own install if its tools are on your PATH, otherwise Docker (or
-    # Apptainer/Singularity when chosen).
     container: Container = field(default_factory=Container.default)
     overwrite: bool = False
 
@@ -145,8 +136,8 @@ class Reporter:
     `messages.ConsoleReporter`, which prints to the terminal.
 
     A run calls `begin` once, `step` after each finished step, `warn` for a problem that does
-    not stop the run, `cropped` once if the template-orientation outputs are cropped, and `end`
-    once.
+    not stop the run, `qc_failed` if the QC page was not written, `cropped` once if the
+    template-orientation outputs are cropped, and `end` once.
     """
 
     def begin(self, input_file: Path, options: Options, outputs: Outputs) -> None:
@@ -194,8 +185,7 @@ def _warp_masks(
 
 
 def register_with_ants(ws: Workspace, subject: Path, options: Options) -> Transforms:
-    """Register the scan to the template with ANTs, run as `options.container` says (your
-    own install if it is on your PATH, otherwise Docker, by default)."""
+    """Register the scan to the template with ANTs, run as `options.container` says."""
     ants = options.container.runner(options.threads, scratch=ws.root)
     face = options.regions.needs_face_registration
     return register(ants, ws, subject, options.template, syn=options.syn, face=face)

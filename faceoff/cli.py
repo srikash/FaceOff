@@ -118,7 +118,43 @@ class FaceOffCommand(RichCommand):
                 "eyes in place of the removed ones (add [bold cyan]--reface[/] for the face too; "
                 "[bold cyan]--reface --enucleate[/] means the same).",
             ),
+            panel(
+                "QC page",
+                f"{_EXAMPLE}\n"
+                "Also writes [green]_faceoff_qc.html[/], unless you pass [bold cyan]--no-qc[/]: "
+                "a GIF that sweeps through the sagittal slices of the defaced scan, and of the "
+                "refaced one with [bold cyan]--reface[/] or "
+                "[bold cyan]--renucleate[/]. Extra images get a GIF of their own.",
+            ),
             _extra_images_or_batch(),
+            panel(
+                "Many MP2RAGE or GRE sessions",
+                "--batch cannot take extra images, so run FaceOff once per session, for "
+                "example in a loop:\n"
+                "[bold white]for[/] uni [bold white]in[/] [green]sub-*_UNIT1.nii.gz[/]; "
+                "[bold white]do[/]\n"
+                "  [bold white]faceoff[/] [bold cyan]-i[/] [green]\"$uni\"[/] "
+                "[bold cyan]--extra-images[/] "
+                "[green]\"${uni%_UNIT1.nii.gz}\"_inv-*_MP2RAGE.nii.gz[/]\n"
+                "[bold white]done[/]",
+            ),
+            panel(
+                "Your own ANTs",
+                f"{_EXAMPLE}\n"
+                "Uses the ANTs tools on your PATH when it finds them, with no container. "
+                "Force it with [bold cyan]--engine local[/], or use a container with "
+                "[bold cyan]--engine docker[/].",
+            ),
+            panel(
+                "On a cluster (Apptainer or Singularity)",
+                f"{_EXAMPLE} [bold cyan]--engine apptainer[/]\n"
+                "Downloads the ANTs image into your cache folder the first time, then reuses "
+                "it.\n\n"
+                "[bold white]apptainer pull[/] [green]ants.sif[/] "
+                "[green]docker://antsx/ants:2.6.5[/]\n"
+                f"{_EXAMPLE} [bold cyan]--sif[/] [green]ants.sif[/]\n"
+                "Uses an image file you pulled yourself, for example on a login node.",
+            ),
             Text.from_markup("[dim]More examples: docs/usage.md[/]"),
             Text.from_markup(f"\n[dim]{CITATION_NOTICE}[/]"),
         )
