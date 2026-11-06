@@ -4,7 +4,7 @@ If you use FaceOff, please cite FaceOff, the MNI ICBM152 template, and ANTs. Eac
 
 ## Text for your methods section
 
-> Scans were defaced with FaceOff (version 1.9.7; Kashyap, 2026a), which registers each scan to a modified MNI ICBM152 template (Kashyap, 2026b) using the ANTs registration tools (Avants et al., 2011; Tustison et al., 2021).
+> Scans were defaced with FaceOff (version 1.9.7; Kashyap, 2026a), which registers each scan to a modified MNI ICBM152 template (Kashyap, 2026b; Fonov et al., 2009, 2011) using the ANTs registration tools (Avants et al., 2011; Tustison et al., 2021).
 
 Change the version number to the one you used, and list the references below in your bibliography (the "a" and "b" tell the two 2026 entries by the same author apart, as APA requires).
 
