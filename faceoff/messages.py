@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -109,6 +110,11 @@ class ConsoleReporter(Reporter):
     def warn(self, message: str) -> None:
         """Print a problem that did not stop the run."""
         log(f"[yellow]{message}[/]")
+
+    def qc_failed(self) -> None:
+        """Exclude a failed QC page from the output list."""
+        if self._outputs is not None:
+            self._outputs = replace(self._outputs, qc=None)
 
     def cropped(self, crop: Crop) -> None:
         """Print which of the scan's own slices were kept."""

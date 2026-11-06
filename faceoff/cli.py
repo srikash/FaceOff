@@ -341,7 +341,7 @@ def cli(
             "--batch; for other images of the same scan, use --extra-images."
         )
     extras = _split_names([*extra_images, *context.args]) if extra_images else ()
-    files = _split_names([batch, *context.args]) if batch else (input_file,)
+    files = _split_names([batch, *context.args]) if batch is not None else (input_file,)
     # Every file and number is checked here, before the banner, ANTs, or the template, and
     # every problem is listed at once.
     try:
@@ -349,11 +349,11 @@ def cli(
         scans = scans_to_deface(files, extras)
         if not scans:
             raise ValueError("Give at least one scan.")
-        options = deface.Options(threads=threads or 1, syn=syn, reorient=reorient, crop=crop,
+        threads = ants_threads(threads)
+        options = deface.Options(threads=threads, syn=syn, reorient=reorient, crop=crop,
                                  reface=reface, enucleate=enucleate, renucleate=renucleate,
                                  qc=qc, container=container, overwrite=overwrite)
         deface.check_outputs(scans, options)
-        threads = ants_threads(threads)
     except ValueError as problem:  # InputError, or a container choice that does not fit
         raise click.UsageError(str(problem)) from problem
 
@@ -367,10 +367,6 @@ def cli(
         error(str(failure))
         raise SystemExit(1) from failure
 
-    options = deface.Options(
-        threads=threads, syn=syn, reorient=reorient, crop=crop, reface=reface,
-        enucleate=enucleate, renucleate=renucleate, qc=qc, container=container, overwrite=overwrite,
-    )
     if len(scans) > 1:
         quote("This is turning into a real marriage.", "Face/Off (1997)")
         console.print()
@@ -379,7 +375,7 @@ def cli(
     for scan in scans:
         try:
             _deface_with_timer(scan, options)
-        except AntsError as failure:  # one scan failing in ANTs does not stop the others
+        except (AntsError, ValueError) as failure:
             error(f"{scan.scan}: {failure}")
             failed.append(scan)
     if failed:

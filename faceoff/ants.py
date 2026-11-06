@@ -14,6 +14,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -217,15 +218,14 @@ class Container:
             return
         log(f"Downloading the ANTs image for Apptainer into {target} (once only)")
         target.parent.mkdir(parents=True, exist_ok=True)
-        partial = target.with_name(target.name + ".partial")
-        partial.unlink(missing_ok=True)
-        pulled = subprocess.run(
-            [executable, "pull", str(partial), f"docker://{ANTS_IMAGE}"]
-        ).returncode
-        if pulled != 0:
-            partial.unlink(missing_ok=True)
-            raise RuntimeError(f"Could not download docker://{ANTS_IMAGE} with {executable}.")
-        partial.rename(target)  # only a complete download gets the real name
+        with tempfile.TemporaryDirectory(dir=target.parent) as temp:
+            partial = Path(temp) / target.name
+            pulled = subprocess.run(
+                [executable, "pull", str(partial), f"docker://{ANTS_IMAGE}"]
+            ).returncode
+            if pulled != 0:
+                raise RuntimeError(f"Could not download docker://{ANTS_IMAGE} with {executable}.")
+            partial.replace(target)
 
     def runner(self, threads: int, scratch: Path) -> AntsRunner:
         """Return what runs the ANTs tools for one scan."""

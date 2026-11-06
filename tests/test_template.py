@@ -77,3 +77,23 @@ def test_bundled_files_are_used_only_when_complete(tmp_path, monkeypatch, fake_f
 def test_environment_variable_wins(tmp_path, monkeypatch):
     monkeypatch.setenv("FACEOFF_TEMPLATE_DIR", str(tmp_path / "mine"))
     assert template.Template.default().folder == tmp_path / "mine"
+
+
+def test_concurrent_downloads_do_not_share_partial_files(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    payload = b"template"
+    monkeypatch.setattr(template_files, "TEMPLATE_FILES", {"test.nii.gz": hashlib.md5(payload).hexdigest()})
+    barrier = Barrier(2)
+
+    def download(url, dest):
+        dest.write_bytes(payload)
+        barrier.wait(timeout=5)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(template_files.fetch_missing, tmp_path, download) for _ in range(2)]
+        for future in futures:
+            future.result()
+    assert (tmp_path / "test.nii.gz").read_bytes() == payload
+    assert len(list(tmp_path.iterdir())) == 1

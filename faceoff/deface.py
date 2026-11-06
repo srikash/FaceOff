@@ -8,6 +8,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import nibabel as nib
+import numpy as np
 
 from . import masking, qc
 from .ants import Container
@@ -129,7 +130,10 @@ def check_outputs(scans: list[ScanToDeface], options: Options) -> None:
     outputs = [path for scan in scans for path in
                Outputs.for_input(scan.scan, list(scan.extra_images), options).written()]
     resolved = [path.resolve() for path in outputs]
-    if inputs.intersection(resolved) or len(set(resolved)) != len(resolved):
+    input_ids = {(path.stat().st_dev, path.stat().st_ino) for path in inputs if path.exists()}
+    output_ids = [(path.stat().st_dev, path.stat().st_ino) for path in outputs if path.exists()]
+    if (inputs.intersection(resolved) or len(set(resolved)) != len(resolved)
+            or input_ids.intersection(output_ids) or len(set(output_ids)) != len(output_ids)):
         raise ValueError("Output paths conflict with inputs or other outputs.")
     existing = [str(path) for path in outputs if path.exists() or path.is_symlink()]
     if existing and not options.overwrite:
@@ -153,6 +157,9 @@ class Reporter:
 
     def warn(self, message: str) -> None:
         """Called when something optional, such as the QC page, could not be written."""
+
+    def qc_failed(self) -> None:
+        """Called when the QC page was not written."""
 
     def cropped(self, crop: Crop) -> None:
         """Called once with the slices of the input that were kept."""
@@ -223,6 +230,8 @@ def run(
 
         # The template masks mark the region to remove; the deface mask is its inverse.
         face, eyes = _warp_masks(tx, ws, template, regions, "subject")
+        if not np.any(np.asanyarray(face.dataobj)):
+            raise ValueError("The face mask is empty; the scan was not defaced.")
         keep = masking.keep_mask(face, eyes)
         nib.save(keep, outputs.deface_mask)
         reporter.step("deface mask")
@@ -281,6 +290,7 @@ def run(
             except Exception as problem:  # noqa: BLE001 (any failure here is only a warning)
                 reporter.warn(f"No QC page: {type(problem).__name__}: {problem}")
                 outputs = replace(outputs, qc=None)
+                reporter.qc_failed()
 
     reporter.end()
     return outputs

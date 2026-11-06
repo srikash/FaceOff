@@ -99,7 +99,9 @@ class TalReorientation:
                 if grid not in crops:
                     crops[grid] = _crop_slices(image.shape[:3], affine, self.template.crop_z_mm)
                 cropped = crops[grid]
-                data = np.take(data, np.arange(cropped.first, cropped.last), axis=cropped.axis)
+                slices = [slice(None)] * data.ndim
+                slices[cropped.axis] = slice(cropped.first, cropped.last)
+                data = data[tuple(slices)]
                 affine[:3, 3] += affine[:3, cropped.axis] * cropped.first
             tal = nib.Nifti1Image(data, affine, image.header)
             tal.set_sform(affine, code=4)  # 4 = MNI152 space

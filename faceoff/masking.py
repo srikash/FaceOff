@@ -44,7 +44,7 @@ def deface(subject: nib.Nifti1Image, keep: nib.Nifti1Image) -> nib.Nifti1Image:
     The result keeps the scan's own data type (an int16 scan stays int16), so every voxel
     outside the face is stored exactly as before. A scan stored with a scale factor and offset
     is saved as float32, because zero may not be representable in its stored type. A 4D scan,
-    such as several GRE echoes in one file, is masked one volume at a time.
+    such as several GRE echoes in one file, is masked across all volumes.
     """
     data = np.asanyarray(subject.dataobj)  # in the stored type unless the file is rescaled
     mask = np.asanyarray(keep.dataobj) != 0
@@ -53,7 +53,7 @@ def deface(subject: nib.Nifti1Image, keep: nib.Nifti1Image) -> nib.Nifti1Image:
         return _like(subject, np.where(mask, data, 0))
     header = subject.header.copy()
     header.set_slope_inter(None, None)  # values are stored as they are; no rescaling
-    return nib.Nifti1Image(np.where(mask, data, 0).astype(data.dtype), subject.affine, header)
+    return nib.Nifti1Image(np.where(mask, data, 0), subject.affine, header)
 
 
 def reface(
@@ -84,6 +84,8 @@ def reface(
     if not np.isfinite(numerator) or not np.isfinite(denominator) or denominator == 0:
         raise ValueError("Cannot reface: brain intensities are invalid.")
     scale = float(numerator / denominator)
+    if not np.isfinite(scale):
+        raise ValueError("Cannot reface: brain intensity scale is invalid.")
     return _like(defaced, np.where(face, scale * ref, subject)), scale
 
 

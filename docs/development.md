@@ -1,12 +1,13 @@
 # Development
 
 ```bash
-pip install -e . pytest ruff
-python -m pytest tests
-ruff check --select F,E9 .
+uv run ruff format --check
+uv run ruff check
+uv run mypy .
+uv run pytest
 ```
 
-The editable install downloads the template files from Zenodo once, into `faceoff/data/` (git ignores that folder).
+Building the package downloads the template files from Zenodo once, into `faceoff/data/` (git ignores that folder).
 
 ```
 faceoff/cli.py          the faceoff command and its help screen

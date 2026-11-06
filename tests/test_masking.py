@@ -58,3 +58,12 @@ def test_reface_fill_limits_what_is_put_back():
     fill = masking.fill_region(_img([[[1, 0, 0, 0]]]), _img([[[0, 1, 0, 0]]]), face=False, eyes=True)
     refaced, _ = masking.reface(subject, keep, template_ref, template_brain, fill)
     assert np.asanyarray(refaced.dataobj).ravel().tolist() == [0, 20, 10, 10]
+
+
+def test_reface_rejects_empty_brain():
+    import pytest
+
+    image = _img([[[1, 1]]])
+    empty = _img([[[0, 0]]])
+    with pytest.raises(ValueError, match="brain region is empty"):
+        masking.reface(image, image, image, empty)

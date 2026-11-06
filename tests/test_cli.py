@@ -226,3 +226,17 @@ def test_overwrite_never_replaces_an_input(tmp_path, runs):
     result = CliRunner().invoke(cli_module.cli, ["--batch", scan, other, "--overwrite"])
     assert result.exit_code == 2
     assert not runs
+
+
+def test_output_hard_link_to_input_is_refused(tmp_path, runs):
+    scan = _scan(tmp_path, "a.nii.gz")
+    (tmp_path / "a_defaced.nii.gz").hardlink_to(scan)
+    result = CliRunner().invoke(cli_module.cli, ["-i", scan, "--overwrite"])
+    assert result.exit_code == 2
+    assert not runs
+
+
+def test_empty_batch_is_refused(tmp_path, runs):
+    result = CliRunner().invoke(cli_module.cli, ["--batch", ""])
+    assert result.exit_code == 2
+    assert not runs

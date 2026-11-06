@@ -81,7 +81,7 @@ def test_enucleate_removes_the_eyes_too(tmp_path, template):
     subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
     plain = deface.run(ScanToDeface(subject), deface.Options(threads=1, crop=False, template=template), registration=StandInRegistration())
     assert (np.asanyarray(nib.load(plain.defaced).dataobj)[2] == 7).all()
-    options = deface.Options(threads=1, crop=False, enucleate=True, template=template)
+    options = deface.Options(threads=1, crop=False, enucleate=True, template=template, overwrite=True)
     outputs = deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
     defaced = np.asanyarray(nib.load(outputs.defaced).dataobj)
     assert (defaced[:3] == 0).all() and (defaced[3:] == 7).all()
@@ -124,7 +124,7 @@ def test_qc_page_adds_refaced_with_reface_or_renucleate_and_a_gif_per_extra(tmp_
     subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
     extra = _save(tmp_path / "inv1.nii.gz", np.full((6, 5, 4), 5, np.int16))
     for flags in ({"reface": True}, {"renucleate": True}):
-        options = deface.Options(threads=1, crop=False, qc=True, template=template, **flags)
+        options = deface.Options(threads=1, crop=False, qc=True, template=template, overwrite=True, **flags)
         outputs = deface.run(ScanToDeface(subject, (extra,)), options,
                              registration=StandInRegistration())
         assert _titles(outputs.qc) == (["defaced", "refaced", "defaced"], 2)
@@ -262,3 +262,30 @@ def test_no_reorient_writes_transforms_but_no_tal_files(tmp_path, template):
     assert outputs.txn_itk.exists() and outputs.txn_fsl.exists()
     assert not list(tmp_path.glob("*_tal_*"))
     assert reporter.crops == []
+
+
+def test_empty_primary_mask_stops_before_writing(tmp_path, template):
+    subject = _save(tmp_path / "t1.nii.gz", np.ones((6, 5, 4), np.int16))
+    nib.save(nib.Nifti1Image(np.zeros((8, 8, 8), np.uint8), np.eye(4)), template.face_mask)
+    with pytest.raises(ValueError, match="face mask is empty"):
+        deface.run(ScanToDeface(subject), deface.Options(threads=1, template=template),
+                   registration=StandInRegistration())
+    assert not (tmp_path / "t1_defaced.nii.gz").exists()
+
+
+def test_failed_qc_does_not_report_old_page(tmp_path, template, monkeypatch, capsys):
+    from faceoff.messages import ConsoleReporter
+
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    old_qc = tmp_path / "t1_faceoff_qc.html"
+    old_qc.write_text("old page")
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("no pixels today")
+
+    monkeypatch.setattr(deface.qc, "write_page", broken)
+    options = deface.Options(threads=1, crop=False, template=template, overwrite=True)
+    outputs = deface.run(ScanToDeface(subject), options, ConsoleReporter(), StandInRegistration())
+    assert outputs.qc is None
+    assert old_qc.read_text() == "old page"
+    assert str(old_qc) not in capsys.readouterr().out
