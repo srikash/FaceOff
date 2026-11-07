@@ -204,3 +204,70 @@ def test_the_parent_of_the_temporary_folder_is_mounted_before_it(tmp_path):
             + ("readonly" if key == "target" else "ro"),
             f"type=bind,source={scratch},{key}={scratch}",
         ]
+
+
+class _FakeProcesses:
+    """Stands in for subprocess.run: records every command, and answers `-h` with `help_text`."""
+
+    def __init__(self, help_text: str | Exception) -> None:
+        self.help_text = help_text
+        self.commands: list[list[str]] = []
+
+    def __call__(self, command, **kwargs):
+        from types import SimpleNamespace
+
+        self.commands.append(list(command))
+        if command[-1] == "-h":
+            if isinstance(self.help_text, Exception):
+                raise self.help_text
+            return SimpleNamespace(returncode=0, stdout=self.help_text, stderr="")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+
+_WITH_FLAG = ["--input", "a", "--output-data-type", "uchar", "--output", "b"]
+
+
+def _runners(tmp_path):
+    return [
+        LocalAnts(threads=1),
+        ApptainerAnts(
+            threads=1, scratch=tmp_path, image=Path("/c/a.sif"), executable="/usr/bin/apptainer"
+        ),
+    ]
+
+
+def test_an_ants_that_does_not_know_the_output_type_flag_is_run_without_it(tmp_path, monkeypatch):
+    for runner in _runners(tmp_path):
+        fake = _FakeProcesses("usage: ... --interpolation ... --output ...")
+        monkeypatch.setattr(ants_module.subprocess, "run", fake)
+        runner.run("antsApplyTransforms", _WITH_FLAG)
+        runner.run("antsApplyTransforms", _WITH_FLAG)
+        applies = [c for c in fake.commands if c[-1] != "-h"]
+        assert all("--output-data-type" not in c and "uchar" not in c for c in applies)
+        assert applies[0][-4:] == ["--input", "a", "--output", "b"]
+        assert sum(c[-1] == "-h" for c in fake.commands) == 1  # asked once, not every call
+
+
+def test_an_ants_that_knows_the_flag_keeps_it(tmp_path, monkeypatch):
+    for runner in _runners(tmp_path):
+        fake = _FakeProcesses("  -u, --output-data-type\n   uchar\n")
+        monkeypatch.setattr(ants_module.subprocess, "run", fake)
+        runner.run("antsApplyTransforms", _WITH_FLAG)
+        assert fake.commands[-1][-6:] == _WITH_FLAG
+
+
+def test_when_the_question_fails_the_flag_is_kept(tmp_path, monkeypatch):
+    for runner in _runners(tmp_path):
+        fake = _FakeProcesses(OSError("no such file"))
+        monkeypatch.setattr(ants_module.subprocess, "run", fake)
+        runner.run("antsApplyTransforms", _WITH_FLAG)
+        assert fake.commands[-1][-6:] == _WITH_FLAG
+
+
+def test_other_tools_and_docker_are_not_asked(tmp_path, monkeypatch):
+    fake = _FakeProcesses("no flag here")
+    monkeypatch.setattr(ants_module.subprocess, "run", fake)
+    LocalAnts(threads=1).run("antsRegistration", ["--output", "x"])
+    DockerAnts(threads=1, scratch=tmp_path).run("antsApplyTransforms", _WITH_FLAG)
+    assert not any(c[-1] == "-h" for c in fake.commands)
+    assert fake.commands[-1][-6:] == _WITH_FLAG

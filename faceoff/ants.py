@@ -37,6 +37,57 @@ def _run(tool: str, command: list[str], env: dict[str, str] | None = None) -> No
         raise AntsError(f"{tool} failed (exit code {returncode}).")
 
 
+OUTPUT_TYPE_FLAG = "--output-data-type"  # antsApplyTransforms, from ANTs 2.3.3
+
+
+def _without_output_type(args: Sequence[str | Path]) -> list[str | Path]:
+    """Return `args` without the output-data-type flag and its value."""
+    kept: list[str | Path] = []
+    skip = False
+    for arg in args:
+        if skip:
+            skip = False
+        elif str(arg) == OUTPUT_TYPE_FLAG:
+            skip = True
+        else:
+            kept.append(arg)
+    return kept
+
+
+class _MaybeOldAnts:
+    """For runners whose ANTs we did not choose (your own install, or an image file from
+    --sif): ANTs before 2.3.3 stops with "Invalid flag" on --output-data-type. The first time
+    the flag is used, `antsApplyTransforms -h` is asked whether it knows it, once; if not, the
+    flag is left out (ANTs then writes its larger default type, with the same values). If the
+    question itself fails, the flag is kept."""
+
+    _knows_output_type: bool | None = None
+
+    def command(self, tool: str, args: Sequence[str | Path]) -> list[str]:
+        raise NotImplementedError
+
+    def _usable_args(self, tool: str, args: Sequence[str | Path]) -> Sequence[str | Path]:
+        if tool != "antsApplyTransforms" or OUTPUT_TYPE_FLAG not in map(str, args):
+            return args
+        if self._knows_output_type is None:
+            self._knows_output_type = self._asks_ants()
+        return args if self._knows_output_type else _without_output_type(args)
+
+    def _asks_ants(self) -> bool:
+        try:
+            help_text = subprocess.run(
+                self.command("antsApplyTransforms", ["-h"]),
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return True
+        output = help_text.stdout + help_text.stderr
+        return OUTPUT_TYPE_FLAG.lstrip("-") in output or not output.strip()
+
+
 class AntsRunner(Protocol):
     """Anything that can run an ANTs tool: LocalAnts, DockerAnts or ApptainerAnts for real runs,
     RecordingAnts in tests."""
@@ -46,7 +97,7 @@ class AntsRunner(Protocol):
         fails."""
 
 
-class LocalAnts:
+class LocalAnts(_MaybeOldAnts):
     """Run ANTs tools straight from your own ANTs install (the tools on your PATH)."""
 
     def __init__(self, threads: int) -> None:
@@ -57,7 +108,7 @@ class LocalAnts:
 
     def run(self, tool: str, args: Sequence[str | Path]) -> None:
         env = {**os.environ, "ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS": str(self.threads)}
-        _run(tool, self.command(tool, args), env)
+        _run(tool, self.command(tool, self._usable_args(tool, args)), env)
 
 
 class DockerAnts:
@@ -93,7 +144,7 @@ class DockerAnts:
         _run(tool, self.command(tool, args))
 
 
-class ApptainerAnts:
+class ApptainerAnts(_MaybeOldAnts):
     """Run ANTs tools from an Apptainer (or Singularity) image file, one `exec` per tool.
 
     The container sees only the folders named in the command, and none of your environment
@@ -121,7 +172,7 @@ class ApptainerAnts:
         return [*cmd, str(self.image), tool, *(str(a) for a in args)]
 
     def run(self, tool: str, args: Sequence[str | Path]) -> None:
-        _run(tool, self.command(tool, args))
+        _run(tool, self.command(tool, self._usable_args(tool, args)))
 
 
 def _mounts(args: Sequence[str | Path], scratch: Path) -> list[tuple[Path, bool]]:
