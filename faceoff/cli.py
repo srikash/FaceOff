@@ -225,6 +225,13 @@ def _terminate(signum: int, frame: Any) -> None:
     raise SystemExit(128 + signum)
 
 
+def _show_notes(failure: BaseException) -> None:
+    """Print the notes attached to a failure, such as which earlier outputs could not be put
+    back."""
+    for note in getattr(failure, "__notes__", []):
+        error(note)
+
+
 def _at_least_one(context: Any, parameter: Any, value: int | None) -> int | None:
     """Refuse a thread count below 1."""
     if value is not None and value < 1:
@@ -452,7 +459,11 @@ def cli(
                 else:  # not a failure FaceOff expects: keep the traceback
                     error(f"{scan.scan}: {type(failure).__name__}: {failure}")
                     console.print_exception()
+                _show_notes(failure)
                 failed.append(scan)
+            except (KeyboardInterrupt, SystemExit) as stop:  # Ctrl-C, SIGTERM, SIGHUP
+                _show_notes(stop)
+                raise
     finally:
         for number, handler in previous.items():
             signal.signal(number, handler)

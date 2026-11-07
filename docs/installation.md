@@ -33,7 +33,7 @@ You can also run it from the checkout without installing it, as long as its depe
 
 ## If you already have ANTs
 
-When `antsAI`, `antsRegistration`, `antsApplyTransforms`, and `ConvertTransformFile` are all on your PATH, FaceOff uses them directly. It downloads no image and needs no container engine. The log says which ANTs it found and warns if the version is not 2.6.5, the one FaceOff is tested with. Versions before 2.3.3 do not know the option that makes the warped masks 8-bit; FaceOff checks this once per run (and for an image given with `--sif`) and leaves the option out, so such an ANTs works but uses more memory for the masks.
+When `antsAI`, `antsRegistration`, `antsApplyTransforms`, and `ConvertTransformFile` are all on your PATH, FaceOff uses them directly. It downloads no image and needs no container engine. The log says which ANTs it found and warns if the version is not 2.6.5, the one FaceOff is tested with. Versions before 2.3.3 do not know the option that makes the warped masks 8-bit; FaceOff checks this once per scan (for your own ANTs and for an image given with `--sif`) and leaves the option out, so such an ANTs works but uses more memory for the masks.
 
 To choose for yourself, use `--engine local` (your install, or an error naming the missing tools) or `--engine docker`.
 

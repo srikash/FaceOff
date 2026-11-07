@@ -294,3 +294,19 @@ def test_the_stop_signals_are_handled_during_the_run_and_restored_after(tmp_path
     assert result.exit_code == 0, result.output
     assert seen == [{cli_module._terminate}]
     assert (signal.getsignal(signal.SIGTERM), signal.getsignal(signal.SIGHUP)) == before
+
+
+@pytest.mark.parametrize("failure", [OSError, SystemExit])
+def test_notes_on_a_failure_are_shown(tmp_path, monkeypatch, failure):
+    def fake_run(scan, options, reporter):
+        problem = failure("rename failed")
+        problem.add_note("could not put back: /data/.old-1a2b3c4d-scan_defaced.nii.gz")
+        raise problem
+
+    monkeypatch.setattr(ants_module, "local_ants_available", lambda: False)
+    monkeypatch.setattr(cli_module.Container, "prepare", lambda self, log: None)
+    monkeypatch.setattr(cli_module, "ensure_template", lambda log: None)
+    monkeypatch.setattr(cli_module.deface, "run", fake_run)
+    result = CliRunner().invoke(cli_module.cli, ["-i", _scan(tmp_path, "a.nii.gz")])
+    assert result.exit_code != 0
+    assert "could not put back: /data/.old-1a2b3c4d-scan_defaced.nii.gz" in result.output
