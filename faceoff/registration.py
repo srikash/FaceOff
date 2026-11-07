@@ -125,6 +125,10 @@ class Transforms:
             "--input", template_image,
             "--output", output,
             "--verbose", "0",
+            # By default ANTs writes 64-bit floats. A mask only holds 0 and 1 (8 times less
+            # memory read back as 8-bit, 1 GB at 0.5 mm voxels), and FaceOff reads an
+            # intensity image as float32 anyway.
+            "--output-data-type", "uchar" if interpolation == "GenericLabel" else "float",
             *self._inverse_chain(stage),
         ])
         # fmt: on

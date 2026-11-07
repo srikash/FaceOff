@@ -26,7 +26,17 @@ def _chain(syn: bool, reface: bool, stage: Stage) -> list[str]:
     tool, args = ants.calls[-1]
     assert tool == "antsApplyTransforms"
     assert args[args.index("--reference-image") + 1] == str(SUBJECT)
-    return args[args.index("--verbose") + 2 :]
+    return args[args.index("--transform") :]
+
+
+def test_masks_are_written_as_8_bit_and_intensity_images_as_float32():
+    ants = RecordingAnts()
+    tx = _register(ants, False, True)
+    tx.to_subject(TEMPLATE.face_mask, WS / "mask.nii.gz", Stage.AFFINE)
+    tx.to_subject(TEMPLATE.t1w, WS / "ref.nii.gz", Stage.NONLINEAR_FACE, "Linear")
+    mask_args, ref_args = ants.calls[-2][1], ants.calls[-1][1]
+    assert mask_args[mask_args.index("--output-data-type") + 1] == "uchar"
+    assert ref_args[ref_args.index("--output-data-type") + 1] == "float"
 
 
 def test_deface_affine_only_uses_inverse_affine():
