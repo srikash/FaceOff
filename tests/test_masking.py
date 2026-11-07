@@ -137,3 +137,18 @@ def test_the_free_text_header_fields_and_extensions_are_cleared(tmp_path):
     refaced, _ = masking.reface(_dirty_scan(data.astype(np.float32) + 1), keep, ref, keep)
     nib.save(refaced, tmp_path / "refaced.nii.gz")
     _assert_clean(tmp_path / "refaced.nii.gz")
+
+
+def test_reface_never_changes_the_callers_template_image():
+    keep = np.ones((6, 6, 6), np.uint8)
+    keep[:2] = 0
+    reference = np.full((6, 6, 6), 50, np.float32)
+    template_ref = _img(reference)
+    masking.reface(
+        _img(np.full((6, 6, 6), 10, np.float32)),
+        _img(keep),
+        template_ref,
+        _img(np.ones((6, 6, 6), np.uint8)),
+        None,
+    )
+    assert (np.asanyarray(template_ref.dataobj) == 50).all()

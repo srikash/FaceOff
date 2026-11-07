@@ -1,6 +1,6 @@
 # The template and the MNI licence
 
-FaceOff registers your scan to a modified version of the MNI ICBM152 2020 extended symmetric template. The five modified files (about 9 MB: the T1w reference and the brain, face, eye, and reface masks) are published on [Zenodo](https://doi.org/10.5281/zenodo.23328835).
+FaceOff registers your scan to a modified version of the MNI ICBM152 2020 extended symmetric template. The five modified files (about 9 MB: the T1w reference and the brain, face, eye, and reface masks) are published on [Zenodo](https://doi.org/10.5281/zenodo.23328835). If you supply your own template files, FaceOff asks ANTs for 8-bit masks only when the face, eye and brain masks hold whole numbers from 0 to 255; a probability map keeps ANTs' default (larger) output, so it is not cut to zero.
 
 ## Where FaceOff finds the files
 

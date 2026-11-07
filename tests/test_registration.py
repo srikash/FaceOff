@@ -29,14 +29,14 @@ def _chain(syn: bool, reface: bool, stage: Stage) -> list[str]:
     return args[args.index("--transform") :]
 
 
-def test_masks_are_written_as_8_bit_and_intensity_images_as_float32():
+def test_the_output_data_type_is_passed_to_ants_only_when_asked_for():
     ants = RecordingAnts()
     tx = _register(ants, False, True)
-    tx.to_subject(TEMPLATE.face_mask, WS / "mask.nii.gz", Stage.AFFINE)
-    tx.to_subject(TEMPLATE.t1w, WS / "ref.nii.gz", Stage.NONLINEAR_FACE, "Linear")
-    mask_args, ref_args = ants.calls[-2][1], ants.calls[-1][1]
-    assert mask_args[mask_args.index("--output-data-type") + 1] == "uchar"
-    assert ref_args[ref_args.index("--output-data-type") + 1] == "float"
+    tx.to_subject(TEMPLATE.face_mask, WS / "mask.nii.gz", Stage.AFFINE, data_type="uchar")
+    tx.to_subject(TEMPLATE.face_mask, WS / "mask2.nii.gz", Stage.AFFINE)
+    asked, not_asked = ants.calls[-2][1], ants.calls[-1][1]
+    assert asked[asked.index("--output-data-type") + 1] == "uchar"
+    assert "--output-data-type" not in not_asked
 
 
 def test_deface_affine_only_uses_inverse_affine():

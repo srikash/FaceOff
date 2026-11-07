@@ -220,8 +220,8 @@ def _extra_images_or_batch() -> Padding:
 
 
 def _terminate(signum: int, frame: Any) -> None:
-    """Turn SIGTERM (a scheduler's time limit, `kill`) into a normal exit, so that the
-    temporary folder and files are cleaned up as with Ctrl-C."""
+    """Turn SIGTERM (a scheduler's time limit, `kill`) or SIGHUP (a closed ssh connection) into
+    a normal exit, so that the temporary folder and files are cleaned up as with Ctrl-C."""
     raise SystemExit(128 + signum)
 
 
@@ -440,7 +440,8 @@ def cli(
         console.print()
 
     failed = []
-    previous = signal.signal(signal.SIGTERM, _terminate)
+    stopping = [signal.SIGTERM, *([signal.SIGHUP] if hasattr(signal, "SIGHUP") else [])]
+    previous = {number: signal.signal(number, _terminate) for number in stopping}
     try:
         for scan in scans:
             try:
@@ -453,7 +454,8 @@ def cli(
                     console.print_exception()
                 failed.append(scan)
     finally:
-        signal.signal(signal.SIGTERM, previous)
+        for number, handler in previous.items():
+            signal.signal(number, handler)
     if failed:
         error(
             f"{len(failed)} of {len(scans)} scans failed: " + ", ".join(s.scan.name for s in failed)

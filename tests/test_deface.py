@@ -631,3 +631,58 @@ def test_the_scratch_folder_is_beside_the_scan_and_gone_afterwards(tmp_path, tem
     assert root.parent == tmp_path and root.name.startswith(".faceoff-")
     assert not root.exists()
     assert not [p for p in tmp_path.iterdir() if p.name.startswith((".faceoff-", ".tmp-"))]
+
+
+def test_masks_are_warped_as_8_bit_and_the_template_image_as_float32(tmp_path, template):
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    registration = StandInRegistration()
+    options = deface.Options(threads=1, crop=False, qc=False, reface=True, template=template)
+    outputs = deface.run(ScanToDeface(subject), options, registration=registration)
+    kinds = {
+        name.split("desc-")[1]: kind
+        for (name, _), kind in zip(registration.moved, registration.data_types, strict=True)
+    }
+    assert kinds == {
+        "face_mask.nii.gz": "uchar",
+        "T1w_ref.nii.gz": "float",
+        "brain_mask.nii.gz": "uchar",
+    }
+    assert nib.load(outputs.deface_mask).get_data_dtype() == np.float32  # as before, on disk
+
+
+def test_a_template_with_fractional_masks_keeps_ants_default_output(tmp_path, template):
+    nib.save(nib.Nifti1Image(np.full((8, 8, 8), 0.5, np.float32), np.eye(4)), template.face_mask)
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    registration = StandInRegistration()
+    options = deface.Options(threads=1, crop=False, qc=False, template=template)
+    deface.run(ScanToDeface(subject), options, registration=registration)
+    assert registration.data_types == [None]  # the face mask would be cut to 0 as 8-bit
+
+
+def test_a_failure_in_the_middle_of_the_renames_leaves_no_temporary_files(
+    tmp_path, template, monkeypatch
+):
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    real_replace, calls = deface.os.replace, []
+
+    def failing_replace(source, target):
+        calls.append(target)
+        if len(calls) == 2:
+            raise OSError("cannot rename")
+        real_replace(source, target)
+
+    monkeypatch.setattr(deface.os, "replace", failing_replace)
+    options = deface.Options(threads=1, crop=False, qc=False, template=template)
+    with pytest.raises(OSError, match="cannot rename"):
+        deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
+    assert not [p for p in tmp_path.iterdir() if p.name.startswith((".tmp-", ".faceoff-"))]
+
+
+def test_a_folder_where_an_output_file_should_go_is_refused_before_anything_runs(
+    tmp_path, template
+):
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    (tmp_path / "t1_defaced.nii.gz").mkdir()
+    options = deface.Options(threads=1, qc=False, overwrite=True, template=template)
+    with pytest.raises(ValueError, match="folder is in the way"):
+        deface.check_outputs([ScanToDeface(subject)], options)

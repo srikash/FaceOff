@@ -106,6 +106,7 @@ class Transforms:
         stage: Stage,
         interpolation: str = "GenericLabel",
         reference: Path | None = None,
+        data_type: str | None = None,
     ) -> None:
         """Move a template image, such as the face mask, onto the scan using this registration.
 
@@ -125,10 +126,9 @@ class Transforms:
             "--input", template_image,
             "--output", output,
             "--verbose", "0",
-            # By default ANTs writes 64-bit floats. A mask only holds 0 and 1 (8 times less
-            # memory read back as 8-bit, 1 GB at 0.5 mm voxels), and FaceOff reads an
-            # intensity image as float32 anyway.
-            "--output-data-type", "uchar" if interpolation == "GenericLabel" else "float",
+            # By default ANTs writes 64-bit floats, 8 times the memory of an 8-bit mask when
+            # read back (1 GB at 0.5 mm voxels). The caller says when a smaller type is safe.
+            *(["--output-data-type", data_type] if data_type else []),
             *self._inverse_chain(stage),
         ])
         # fmt: on

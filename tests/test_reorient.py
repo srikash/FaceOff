@@ -150,3 +150,18 @@ def test_a_non_finite_affine_is_refused():
     affine[0, 0] = np.nan
     with pytest.raises(ValueError, match="not finite"):
         TalReorientation.from_affine_matrix(affine, Template(Path("unused")), np.zeros(3))
+
+
+def test_writing_from_memory_gives_the_same_file_as_writing_from_a_saved_copy(tmp_path):
+    template = write_template(tmp_path / "t")
+    rotation = np.eye(4)
+    rotation[:3, 3] = [2.0, -1.0, 0.5]
+    tal = TalReorientation(rotation, template)
+    image = nib.Nifti1Image(np.arange(60, dtype=np.int16).reshape(3, 4, 5), np.eye(4))
+    saved = tmp_path / "saved.nii.gz"
+    nib.save(image, saved)
+    tal.write_image(image, tmp_path / "from_memory.nii.gz", crop=False)
+    tal.write_images([(saved, tmp_path / "from_file.nii.gz")], crop=False)
+    first, second = (nib.load(tmp_path / f"from_{kind}.nii.gz") for kind in ("memory", "file"))
+    assert first.header.binaryblock == second.header.binaryblock
+    np.testing.assert_array_equal(np.asanyarray(first.dataobj), np.asanyarray(second.dataobj))

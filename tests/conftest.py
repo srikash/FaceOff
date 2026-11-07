@@ -62,6 +62,7 @@ class StandInRegistration:
         self.template_to_scan = np.eye(4) if template_to_scan is None else template_to_scan
         self.per_stage = per_stage or {}
         self.moved: list[tuple[str, Stage]] = []
+        self.data_types: list[str | None] = []  # what each moved image was asked to be written as
         self._subject: Path | None = None
 
     def __call__(self, ws, subject: Path, options) -> "StandInRegistration":
@@ -74,9 +75,16 @@ class StandInRegistration:
         return _LPS_FLIP @ self.template_to_scan @ _LPS_FLIP
 
     def to_subject(
-        self, template_image, output, stage, interpolation="GenericLabel", reference=None
+        self,
+        template_image,
+        output,
+        stage,
+        interpolation="GenericLabel",
+        reference=None,
+        data_type=None,
     ) -> None:
         self.moved.append((Path(template_image).name, stage))
+        self.data_types.append(data_type)
         assert self._subject is not None
         grid = load_image(reference or self._subject)
         source = load_image(template_image)

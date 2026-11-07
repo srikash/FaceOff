@@ -275,3 +275,22 @@ def test_sigterm_ends_the_run_like_ctrl_c_so_that_the_temporary_files_are_cleane
     with pytest.raises(SystemExit) as stopped:
         cli_module._terminate(15, None)
     assert stopped.value.code == 143
+
+
+def test_the_stop_signals_are_handled_during_the_run_and_restored_after(tmp_path, monkeypatch):
+    import signal
+
+    seen = []
+
+    def fake_run(scan, options, reporter):
+        seen.append({signal.getsignal(signal.SIGTERM), signal.getsignal(signal.SIGHUP)})
+
+    monkeypatch.setattr(ants_module, "local_ants_available", lambda: False)
+    monkeypatch.setattr(cli_module.Container, "prepare", lambda self, log: None)
+    monkeypatch.setattr(cli_module, "ensure_template", lambda log: None)
+    monkeypatch.setattr(cli_module.deface, "run", fake_run)
+    before = signal.getsignal(signal.SIGTERM), signal.getsignal(signal.SIGHUP)
+    result = CliRunner().invoke(cli_module.cli, ["-i", _scan(tmp_path, "a.nii.gz")])
+    assert result.exit_code == 0, result.output
+    assert seen == [{cli_module._terminate}]
+    assert (signal.getsignal(signal.SIGTERM), signal.getsignal(signal.SIGHUP)) == before

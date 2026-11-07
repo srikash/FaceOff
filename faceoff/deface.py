@@ -146,6 +146,16 @@ def check_outputs(scans: list[ScanToDeface], options: Options) -> None:
         or len(set(output_ids)) != len(output_ids)
     ):
         raise ValueError("Output paths conflict with inputs or other outputs.")
+    # The files are renamed into place, and a rename onto a folder would fail halfway through.
+    # (The QC page is written on its own and may fail without stopping the run.)
+    qc_pages = {Outputs.for_input(scan.scan, list(scan.extra_images), options).qc for scan in scans}
+    folders = [
+        str(path)
+        for path in outputs
+        if path not in qc_pages and path.is_dir() and not path.is_symlink()
+    ]
+    if folders:
+        raise ValueError("A folder is in the way of an output file: " + ", ".join(folders))
     existing = [str(path) for path in outputs if path.exists() or path.is_symlink()]
     if existing and not options.overwrite:
         raise ValueError("Outputs already exist; use --overwrite: " + ", ".join(existing))
@@ -266,11 +276,23 @@ def _warp_masks(
     None when the eyes stay.
     """
     face = ws.path(f"face_mask_in_{label}.nii.gz")
-    tx.to_subject(template.face_mask, face, regions.face_mask_stage, reference=reference)
+    tx.to_subject(
+        template.face_mask,
+        face,
+        regions.face_mask_stage,
+        reference=reference,
+        data_type=template.mask_data_type,
+    )
     if not regions.removes_eyes:
         return load_image(face), None
     eyes = ws.path(f"eye_mask_in_{label}.nii.gz")
-    tx.to_subject(template.eye_mask, eyes, regions.eye_mask_stage, reference=reference)
+    tx.to_subject(
+        template.eye_mask,
+        eyes,
+        regions.eye_mask_stage,
+        reference=reference,
+        data_type=template.mask_data_type,
+    )
     return load_image(face), load_image(eyes)
 
 
@@ -366,8 +388,15 @@ def run(
         if regions.writes_refaced:
             ref_in_subject = ws.path("template_ref_in_subject.nii.gz")
             brain_in_subject = ws.path("template_brain_in_subject.nii.gz")
-            tx.to_subject(template.t1w, ref_in_subject, Stage.NONLINEAR_FACE, "Linear")
-            tx.to_subject(template.brain_mask, brain_in_subject, Stage.NONLINEAR_FACE)
+            tx.to_subject(
+                template.t1w, ref_in_subject, Stage.NONLINEAR_FACE, "Linear", data_type="float"
+            )
+            tx.to_subject(
+                template.brain_mask,
+                brain_in_subject,
+                Stage.NONLINEAR_FACE,
+                data_type=template.mask_data_type,
+            )
             fill = masking.fill_region(face, eyes, regions.fills_face, regions.fills_eyes)
             refaced, scale = masking.reface(
                 defaced, keep, load_image(ref_in_subject), load_image(brain_in_subject), fill

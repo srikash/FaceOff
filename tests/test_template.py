@@ -101,3 +101,18 @@ def test_concurrent_downloads_do_not_share_partial_files(tmp_path, monkeypatch):
             future.result()
     assert (tmp_path / "test.nii.gz").read_bytes() == payload
     assert len(list(tmp_path.iterdir())) == 1
+
+
+def test_masks_that_only_hold_whole_numbers_up_to_255_can_be_warped_as_8_bit(tmp_path):
+    import nibabel as nib
+    import numpy as np
+    from conftest import write_template
+
+    template = write_template(tmp_path / "binary")
+    assert template.mask_data_type == "uchar"
+    for value, folder in [(0.5, "fractional"), (300, "too_big")]:
+        other = write_template(tmp_path / folder)
+        data = np.zeros((8, 8, 8), np.float32)
+        data[1:3] = value
+        nib.save(nib.Nifti1Image(data, np.eye(4)), other.face_mask)
+        assert other.mask_data_type is None

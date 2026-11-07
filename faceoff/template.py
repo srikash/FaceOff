@@ -80,6 +80,17 @@ class Template:
         ras = mask.affine @ np.append(voxel, 1.0)
         return (ras * np.array([-1.0, -1.0, 1.0, 1.0]))[:3]
 
+    @cached_property
+    def mask_data_type(self) -> str | None:
+        """ "uchar" when the face, eye and brain masks only hold whole numbers from 0 to 255, so
+        that the warped masks can be written as 8-bit; None otherwise (for example a
+        probability map in a template you supply), which keeps ANTs' default output type."""
+        for mask in (self.face_mask, self.eye_mask, self.brain_mask):
+            values = np.asanyarray(load_image(mask).dataobj)
+            if not ((values == np.floor(values)) & (values >= 0) & (values <= 255)).all():
+                return None
+        return "uchar"
+
     @property
     def crop_z_mm(self) -> tuple[float, float]:
         """The world z range (mm, RAS) the template-orientation outputs are cropped to."""
