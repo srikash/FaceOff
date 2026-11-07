@@ -113,6 +113,9 @@ class Outputs:
         return paths
 
 
+_PREFIX_LENGTH = len(".tmp-") + 8 + len("-")  # what _Staging adds to a file name
+
+
 def check_inputs(scans: list[ScanToDeface], options: Options) -> None:
     """Reject runs that cannot work, before any scan is processed: refacing a 4D scan (one
     intensity scale from the first volume would be wrong for the others), and conflicting
@@ -149,6 +152,9 @@ def check_outputs(scans: list[ScanToDeface], options: Options) -> None:
     # The files are renamed into place, and a rename onto a folder would fail halfway through.
     # (The QC page is written on its own and may fail without stopping the run.)
     qc_pages = {Outputs.for_input(scan.scan, list(scan.extra_images), options).qc for scan in scans}
+    too_long = [path.name for path in outputs if len(path.name.encode()) + _PREFIX_LENGTH > 255]
+    if too_long:
+        raise ValueError("File name too long for FaceOff's temporary names: " + ", ".join(too_long))
     folders = [
         str(path)
         for path in outputs
@@ -208,7 +214,8 @@ def _left_by_killed_run(subject: Path, extras: list[Path], options: Options) -> 
     found: list[Path] = []
     for folder in sorted({subject.parent, *(extra.parent for extra in extras)}):
         found += [p for p in folder.glob(f"{SCRATCH_PREFIX}*") if p.is_dir()]
-        found += [p for p in folder.glob(".tmp-*") if p.name.split("-", 2)[-1] in names]
+        for pattern in (".tmp-*", ".old-*"):
+            found += [p for p in folder.glob(pattern) if p.name.split("-", 2)[-1] in names]
     return found
 
 
@@ -217,8 +224,11 @@ class _Staging:
 
     The temporary name keeps the real file name and extension (so nibabel still picks the
     format and compression) and sits in the same folder (so the rename is cheap and cannot
-    cross file systems). `os.replace` swaps one file atomically; the set of files is renamed
-    one after another, not as a single step.
+    cross file systems). `os.replace` swaps one file atomically, and the set is renamed one
+    file after another. To make the set all-or-nothing in practice, an existing output is first
+    renamed to `.old-<tag>-<name>`; if anything fails or a signal arrives part way, every output
+    is put back as it was (decided from what is on disk). Only a hard kill (SIGKILL) can stop
+    this, and then the earlier outputs are still there under their `.old-` names.
     """
 
     def __init__(self) -> None:
@@ -231,11 +241,45 @@ class _Staging:
         self._pending.append((temporary, final))
         return temporary
 
+    def _old(self, final: Path) -> Path:
+        return final.with_name(f".old-{self._tag}-{final.name}")
+
     def commit(self) -> None:
-        """Rename every temporary file to its real name."""
-        for temporary, final in self._pending:
-            os.replace(temporary, final)
+        """Rename every temporary file to its real name, or put everything back and re-raise."""
+        try:
+            for temporary, final in self._pending:
+                if final.exists() or final.is_symlink():
+                    os.replace(final, self._old(final))
+                os.replace(temporary, final)
+        except BaseException as failure:  # includes Ctrl-C and SIGTERM (as SystemExit)
+            if stranded := self._undo():
+                failure.add_note(
+                    "FaceOff could not put these earlier outputs back (remove the .old-<tag>- "
+                    "from a name to get the file): " + ", ".join(str(path) for path in stranded)
+                )
+            raise
+        for _, final in self._pending:
+            try:
+                self._old(final).unlink(missing_ok=True)
+            except OSError:
+                pass  # the new outputs are in place; the next run reports what is left
         self._pending.clear()
+
+    def _undo(self) -> list[Path]:
+        """Put the earlier outputs back, deciding from what is on disk. Returns the `.old-`
+        files that could not be put back. A file is only deleted if our temporary file is gone,
+        which means the file at that name is the one we moved there."""
+        stranded: list[Path] = []
+        for temporary, final in self._pending:
+            old = self._old(final)
+            try:
+                if not temporary.exists():
+                    final.unlink(missing_ok=True)
+                if old.exists() or old.is_symlink():
+                    os.replace(old, final)
+            except OSError:
+                stranded.append(old)
+        return stranded
 
     def discard(self) -> None:
         """Delete any temporary file still there (after a failure or Ctrl-C)."""
@@ -335,6 +379,12 @@ def run(
             "Left by a FaceOff run that was killed: "
             + ", ".join(path.name for path in killed)
             + ". Delete them if no other FaceOff is running in this folder."
+            + (
+                " Files starting with .old- are outputs of an earlier run that the killed run "
+                "had set aside; to get one back, remove the .old-<tag>- from its name."
+                if any(path.name.startswith(".old-") for path in killed)
+                else ""
+            )
         )
 
     with workspace(subject.parent) as ws:

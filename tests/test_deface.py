@@ -2,6 +2,7 @@
 template."""
 
 import re
+from pathlib import Path
 
 import nibabel as nib
 import numpy as np
@@ -686,3 +687,179 @@ def test_a_folder_where_an_output_file_should_go_is_refused_before_anything_runs
     options = deface.Options(threads=1, qc=False, overwrite=True, template=template)
     with pytest.raises(ValueError, match="folder is in the way"):
         deface.check_outputs([ScanToDeface(subject)], options)
+
+
+def _state(folder):
+    return {p.name: p.read_bytes() for p in sorted(folder.iterdir()) if p.is_file()}
+
+
+def _no_leftovers(folder):
+    return not [p for p in folder.iterdir() if p.name.startswith((".tmp-", ".old-", ".faceoff-"))]
+
+
+@pytest.mark.parametrize("fail_at", [1, 2, 3, 5])
+def test_a_rename_that_fails_part_way_puts_every_earlier_output_back(
+    tmp_path, template, monkeypatch, fail_at
+):
+    subject = _save(tmp_path / "uni.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    options = deface.Options(threads=1, crop=False, qc=False, overwrite=True, template=template)
+    deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
+    before = _state(tmp_path)
+    subject = _save(tmp_path / "uni.nii.gz", np.full((6, 5, 4), 9, np.int16))
+    inputs_now = _state(tmp_path)["uni.nii.gz"]
+    real_replace, calls = deface.os.replace, []
+
+    def failing_replace(source, target):
+        calls.append(target)
+        if len(calls) == fail_at:
+            raise OSError("cannot rename")
+        real_replace(source, target)
+
+    monkeypatch.setattr(deface.os, "replace", failing_replace)
+    with pytest.raises(OSError, match="cannot rename"):
+        deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
+    after = _state(tmp_path)
+    assert after.pop("uni.nii.gz") == inputs_now
+    before.pop("uni.nii.gz")
+    assert after == before and _no_leftovers(tmp_path)
+
+
+def test_a_first_run_that_fails_while_renaming_leaves_none_of_its_files(
+    tmp_path, template, monkeypatch
+):
+    subject = _save(tmp_path / "uni.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    real_replace, calls = deface.os.replace, []
+
+    def failing_replace(source, target):
+        calls.append(target)
+        if len(calls) == 3:
+            raise OSError("cannot rename")
+        real_replace(source, target)
+
+    monkeypatch.setattr(deface.os, "replace", failing_replace)
+    options = deface.Options(threads=1, crop=False, qc=False, template=template)
+    with pytest.raises(OSError, match="cannot rename"):
+        deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
+    assert sorted(p.name for p in tmp_path.iterdir() if p.is_file()) == ["uni.nii.gz"]
+
+
+def test_ctrl_c_right_after_an_old_output_is_set_aside_still_restores_everything(
+    tmp_path, template, monkeypatch
+):
+    subject = _save(tmp_path / "uni.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    options = deface.Options(threads=1, crop=False, qc=False, overwrite=True, template=template)
+    deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
+    before = _state(tmp_path)
+    subject = _save(tmp_path / "uni.nii.gz", np.full((6, 5, 4), 9, np.int16))
+    inputs_now = _state(tmp_path)["uni.nii.gz"]
+    real_replace, interrupted = deface.os.replace, []
+
+    def interrupting_replace(source, target):
+        real_replace(source, target)  # the rename happened ...
+        if not interrupted and Path(target).name.startswith(".old-"):
+            interrupted.append(target)
+            raise KeyboardInterrupt  # ... and the signal came before it was recorded anywhere
+
+    monkeypatch.setattr(deface.os, "replace", interrupting_replace)
+    with pytest.raises(KeyboardInterrupt):
+        deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
+    after = _state(tmp_path)
+    assert after.pop("uni.nii.gz") == inputs_now
+    before.pop("uni.nii.gz")
+    assert after == before and _no_leftovers(tmp_path)
+
+
+def test_an_output_set_aside_by_a_killed_run_is_reported_with_how_to_get_it_back(
+    tmp_path, template
+):
+    subject = _save(tmp_path / "t1.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    set_aside = tmp_path / ".old-1a2b3c4d-t1_defaced.nii.gz"
+    set_aside.write_bytes(b"earlier output")
+    reporter = RecordingReporter()
+    options = deface.Options(threads=1, crop=False, qc=False, template=template)
+    deface.run(ScanToDeface(subject), options, reporter, StandInRegistration())
+    [warning] = [w for w in reporter.warnings if "was killed" in w]
+    assert set_aside.name in warning and "remove the .old-<tag>-" in warning
+    assert set_aside.read_bytes() == b"earlier output"  # reported, never deleted
+
+
+def test_a_file_name_too_long_for_the_temporary_names_is_refused(tmp_path, template):
+    long_name = "a" * 230
+    subject = _save(tmp_path / f"{long_name}.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    options = deface.Options(threads=1, qc=False, template=template)
+    with pytest.raises(ValueError, match="too long"):
+        deface.check_outputs([ScanToDeface(subject)], options)
+
+
+@pytest.mark.parametrize("interruption", [KeyboardInterrupt, SystemExit])
+def test_interruptions_put_a_mixed_set_back_and_a_clean_run_leaves_no_backups(
+    tmp_path, template, monkeypatch, interruption
+):
+    subject = _save(tmp_path / "uni.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    options = deface.Options(threads=1, crop=False, qc=False, overwrite=True, template=template)
+    deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
+    (tmp_path / "uni_defaceMask.nii.gz").unlink()  # a mixed set: some outputs exist, one does not
+    before = _state(tmp_path)
+    real_replace, calls = deface.os.replace, []
+
+    def interrupting_replace(source, target):
+        calls.append(target)
+        if len(calls) == 4:
+            raise interruption
+        real_replace(source, target)
+
+    monkeypatch.setattr(deface.os, "replace", interrupting_replace)
+    with pytest.raises(interruption):
+        deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
+    assert _state(tmp_path) == before and _no_leftovers(tmp_path)
+    monkeypatch.undo()
+    deface.run(ScanToDeface(subject), options, registration=StandInRegistration())
+    assert _no_leftovers(tmp_path)  # the success path removes the .old- files too
+
+
+def test_the_undo_keeps_going_after_one_restore_fails_and_says_what_is_left(tmp_path, monkeypatch):
+    staging = deface._Staging()
+    finals = [tmp_path / "a.txt", tmp_path / "b.txt"]
+    for final in finals:
+        final.write_text("earlier")
+    for final in finals:
+        staging.path(final).write_text("new")
+    real_replace = deface.os.replace
+
+    def replace(source, target):
+        moving_in = not Path(source).name.startswith(".old-")
+        if Path(target).name == "b.txt" and moving_in:
+            raise OSError("stop")  # the commit fails at the second output ...
+        if Path(target).name == "a.txt" and not moving_in:
+            raise PermissionError("no")  # ... and putting the first one back fails too
+        real_replace(source, target)
+
+    monkeypatch.setattr(deface.os, "replace", replace)
+    with pytest.raises(OSError, match="stop") as stopped:
+        staging.commit()
+    assert (tmp_path / "b.txt").read_text() == "earlier"  # restored although a.txt's was not
+    assert not (tmp_path / "a.txt").exists()
+    assert any(".old-" in note and "a.txt" in note for note in stopped.value.__notes__)
+    assert [p.read_text() for p in tmp_path.glob(".old-*-a.txt")] == ["earlier"]  # nothing lost
+
+
+def test_the_undo_never_deletes_a_file_that_appeared_under_an_output_name(tmp_path):
+    staging = deface._Staging()
+    final = tmp_path / "x.txt"
+    staging.path(final).write_text("ours, not yet moved into place")
+    final.write_text("someone else's file")  # appeared after we staged
+    assert staging._undo() == []
+    assert final.read_text() == "someone else's file"
+
+
+@pytest.mark.parametrize(("stem_length", "accepted"), [(219, True), (220, False)])
+def test_the_longest_output_name_that_fits_the_temporary_prefix(
+    tmp_path, template, stem_length, accepted
+):
+    subject = _save(tmp_path / f"{'a' * stem_length}.nii.gz", np.full((6, 5, 4), 7, np.int16))
+    options = deface.Options(threads=1, template=template)  # the longest name is _tal_defaceMask
+    if accepted:
+        deface.check_outputs([ScanToDeface(subject)], options)
+    else:
+        with pytest.raises(ValueError, match="too long"):
+            deface.check_outputs([ScanToDeface(subject)], options)

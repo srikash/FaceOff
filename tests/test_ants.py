@@ -1,3 +1,4 @@
+import subprocess
 import sys
 from pathlib import Path
 
@@ -271,3 +272,43 @@ def test_other_tools_and_docker_are_not_asked(tmp_path, monkeypatch):
     DockerAnts(threads=1, scratch=tmp_path).run("antsApplyTransforms", _WITH_FLAG)
     assert not any(c[-1] == "-h" for c in fake.commands)
     assert fake.commands[-1][-6:] == _WITH_FLAG
+
+
+class _OddProbe(_FakeProcesses):
+    """A `-h` that answers with a given exit code, or with output only on stderr."""
+
+    def __init__(self, returncode=0, stdout="", stderr="", raises=None):
+        super().__init__("")
+        self.returncode, self.stdout, self.stderr, self.raises = returncode, stdout, stderr, raises
+
+    def __call__(self, command, **kwargs):
+        from types import SimpleNamespace
+
+        if command[-1] != "-h":
+            return super().__call__(command, **kwargs)
+        self.commands.append(list(command))
+        if self.raises:
+            raise self.raises
+        return SimpleNamespace(returncode=self.returncode, stdout=self.stdout, stderr=self.stderr)
+
+
+@pytest.mark.parametrize(
+    ("probe", "keeps_the_flag"),
+    [
+        (_OddProbe(returncode=1, stderr="FATAL: squashfs mount failed"), True),
+        (_OddProbe(raises=UnicodeDecodeError("utf-8", b"\xff", 0, 1, "bad")), True),
+        (_OddProbe(raises=subprocess.TimeoutExpired("x", 120)), True),
+        (_OddProbe(stdout="", stderr=""), True),
+        (_OddProbe(stderr="usage ... --output-data-type ..."), True),
+        (_OddProbe(stdout="usage: nothing about types", stderr=""), False),
+        (_OddProbe(stdout="", stderr="usage: nothing about types"), False),
+    ],
+)
+def test_only_a_clean_help_without_the_flag_makes_runners_leave_it_out(
+    tmp_path, monkeypatch, probe, keeps_the_flag
+):
+    for runner in _runners(tmp_path):
+        probe.commands.clear()
+        monkeypatch.setattr(ants_module.subprocess, "run", probe)
+        runner.run("antsApplyTransforms", _WITH_FLAG)
+        assert (probe.commands[-1][-6:] == _WITH_FLAG) == keeps_the_flag

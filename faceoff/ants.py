@@ -79,10 +79,13 @@ class _MaybeOldAnts:
                 self.command("antsApplyTransforms", ["-h"]),
                 capture_output=True,
                 text=True,
+                errors="replace",
                 timeout=120,
                 check=False,
             )
-        except (OSError, subprocess.SubprocessError):
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return True
+        if help_text.returncode != 0:  # the question failed (an engine error, say): keep it
             return True
         output = help_text.stdout + help_text.stderr
         return OUTPUT_TYPE_FLAG.lstrip("-") in output or not output.strip()
