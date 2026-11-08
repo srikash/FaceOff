@@ -24,7 +24,7 @@ RUN set -eu; \
     sort -u /tmp/libs.txt | xargs -I{} cp -L {} /ants/lib/; \
     test "$(ls /ants/lib | wc -l)" -gt 20
 
-FROM python:3.13-slim-bookworm AS builder
+FROM python:3.15-slim-bookworm AS builder
 COPY --from=uv /uv /uvx /bin/
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -40,7 +40,7 @@ COPY faceoff ./faceoff
 RUN uv sync --locked --no-dev --no-editable
 
 # Same Debian release as the ANTs image, so its libraries match.
-FROM python:3.13-slim-bookworm
+FROM python:3.15-slim-bookworm
 LABEL org.opencontainers.image.title="FaceOff" \
       org.opencontainers.image.description="Deface MRI scans with ANTs and a modified MNI152 template" \
       org.opencontainers.image.source="https://github.com/srikash/FaceOff" \
