@@ -1,0 +1,109 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build the package
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.meta.outputs.name }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+
+      - name: Read the name and version, and check a tag matches pyproject.toml
+        id: meta
+        run: |
+          read -r name version < <(python3 -c 'import tomllib; p = tomllib.load(open("pyproject.toml", "rb"))["project"]; print(p["name"], p["version"])')
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME#v}" != "${version}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match version ${version} in pyproject.toml." >&2
+            exit 1
+          fi
+          echo "name=${name}" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Test
+        run: uv run --locked pytest
+
+      # The wheel build downloads the five template files from Zenodo and bundles them.
+      - name: Build
+        run: uv build --no-sources --out-dir dist
+
+      - name: Check what is inside
+        run: python3 scripts/check_dist.py dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  github-release:
+    name: Create the GitHub release
+    # The release is what Zenodo archives.
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Create the release if it does not exist yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release ${GITHUB_REF_NAME} already exists; nothing to do."
+          else
+            gh release create "${GITHUB_REF_NAME}" dist/* \
+              --repo "${GITHUB_REPOSITORY}" --verify-tag --generate-notes \
+              --title "FaceOff ${GITHUB_REF_NAME#v}"
+          fi
+
+  pypi:
+    name: Publish to PyPI
+    # Off until the one-time PyPI setup is done and the repository variable
+    # PUBLISH_TO_PYPI is set to "true" (docs/development.md).
+    if: github.ref_type == 'tag' && vars.PUBLISH_TO_PYPI == 'true'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Skip if this version is already on PyPI
+        id: check
+        run: |
+          status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            "https://pypi.org/pypi/${{ needs.build.outputs.name }}/${{ needs.build.outputs.version }}/json")"
+          case "${status}" in
+            200) echo "Already on PyPI; skipping."; echo "skip=true" >> "${GITHUB_OUTPUT}" ;;
+            404) echo "skip=false" >> "${GITHUB_OUTPUT}" ;;
+            *) echo "Unexpected PyPI answer ${status}." >&2; exit 1 ;;
+          esac
+
+      - name: Publish
+        if: steps.check.outputs.skip != 'true'
+        run: uv publish dist/*

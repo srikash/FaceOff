@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [v2.0.0]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Check formatting
+        run: uv run ruff format --check
+
+      - name: Lint
+        run: uv run ruff check
+
+      - name: Type-check
+        run: uv run mypy .
+
+  test:
+    name: Test Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13", "3.14"]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked --python ${{ matrix.python }}
+
+      - name: Test
+        run: uv run --python ${{ matrix.python }} pytest
+
+  package:
+    name: Build and check the package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+
+      # The wheel build downloads the five template files from Zenodo and bundles them.
+      - name: Build
+        run: uv build --no-sources --out-dir dist
+
+      - name: Check what is inside
+        run: python3 scripts/check_dist.py dist
+
+      - name: Install the wheel in a clean environment and run it
+        run: |
+          uv venv --python 3.13 "$RUNNER_TEMP/clean"
+          uv pip install --python "$RUNNER_TEMP/clean/bin/python" dist/*.whl
+          cd "$RUNNER_TEMP"
+          clean/bin/faceoff --version
+          clean/bin/python - <<'PY'
+          from faceoff.template import Template
+          from faceoff.template_files import is_complete
+
+          folder = Template.default().folder
+          assert "site-packages" in str(folder), folder
+          assert is_complete(folder), folder
+          PY

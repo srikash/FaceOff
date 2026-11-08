@@ -1,0 +1,126 @@
+name: Container image
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - pyproject.toml
+      - uv.lock
+      - licences/**
+      - faceoff/**
+      - bundle_template.py
+      - .github/workflows/container.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Lower case is required by GHCR, so this is not built from github.repository.
+  IMAGE: ghcr.io/srikash/faceoff
+
+jobs:
+  docker:
+    name: Build, check and push the Docker image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Work out the version and check a tag matches pyproject.toml
+        id: version
+        run: |
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME#v}" != "${version}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match version ${version} in pyproject.toml." >&2
+            exit 1
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # The build downloads the template files from Zenodo, as the release build does.
+      - name: Build (not pushed yet)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: faceoff:check
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Check the image
+        run: |
+          docker run --rm faceoff:check --version | grep -F "${{ steps.version.outputs.version }}"
+          docker run --rm --entrypoint python faceoff:check -c '
+          from faceoff.template import Template
+          from faceoff.template_files import is_complete
+          folder = Template.default().folder
+          assert "site-packages" in str(folder) and is_complete(folder), folder'
+          scans="$(docker run --rm --entrypoint sh faceoff:check -c "find / -xdev \( -name '*.nii' -o -name '*.nii.gz' \) -not -path '*/nibabel/tests/*'" | wc -l)"
+          test "${scans}" -eq 5 || { echo "Expected only the 5 template files, found ${scans} images." >&2; exit 1; }
+          # Every ANTs tool FaceOff runs is there and finds all its libraries.
+          docker run --rm --entrypoint sh faceoff:check -c '
+          for t in antsAI antsRegistration antsApplyTransforms ConvertTransformFile; do
+            path="$(command -v "$t")" || { echo "$t is missing" >&2; exit 1; }
+            if ldd "$path" | grep -q "not found"; then echo "$t is missing a library" >&2; exit 1; fi
+          done'
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push
+        if: github.ref_type == 'tag'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          cache-from: type=gha
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE }}:latest
+
+  singularity:
+    name: Build and push the Apptainer/Singularity image
+    if: github.ref_type == 'tag'
+    needs: docker
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Install Apptainer
+        uses: eWaterCycle/setup-apptainer@v2
+
+      - name: Log in to GHCR
+        run: |
+          apptainer registry login \
+            --username "${{ github.actor }}" \
+            --password "${{ secrets.GITHUB_TOKEN }}" \
+            oras://ghcr.io
+
+      - name: Build the SIF from the published Docker image
+        run: |
+          apptainer build faceoff.sif \
+            docker://${{ env.IMAGE }}:${{ needs.docker.outputs.version }}
+
+      - name: Push the SIF to GHCR
+        run: |
+          apptainer push faceoff.sif \
+            oras://${{ env.IMAGE }}:${{ needs.docker.outputs.version }}-sif
