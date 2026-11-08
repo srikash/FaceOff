@@ -103,7 +103,7 @@ jobs:
       packages: write
     steps:
       - name: Install Apptainer
-        uses: eWaterCycle/setup-apptainer@v2
+        uses: eWaterCycle/setup-apptainer@v3
 
       - name: Log in to GHCR
         env:
