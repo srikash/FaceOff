@@ -4,7 +4,7 @@ FaceOff registers your scan to a modified version of the MNI ICBM152 2020 extend
 
 ## Where FaceOff finds the files
 
-- `pip install faceoff` includes them, so there is nothing more to download.
+- Installing the package includes them, so there is nothing more to download.
 - If you run FaceOff straight from a checkout without installing it (`python -m faceoff`), it downloads the files from Zenodo the first time, checks them against their published checksums, and keeps them in `faceoff/zenodo-23328835/` inside your cache folder (`$XDG_CACHE_HOME` if set, usually `~/.cache`).
 - Set `FACEOFF_TEMPLATE_DIR` to use a folder of your own.
 

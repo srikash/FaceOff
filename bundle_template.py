@@ -1,7 +1,7 @@
 """Build step: put the five template files into the pip package.
 
 When the package is built, this downloads the files (about 9 MB) from Zenodo into
-faceoff/data and checks their checksums, so `pip install faceoff` needs no further download.
+faceoff/data and checks their checksums, so installing the package needs no further download.
 Running from a source checkout without building downloads them on first use instead. The
 MNI copyright notice ships as faceoff/COPYING-MNI.
 """

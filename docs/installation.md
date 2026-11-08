@@ -7,7 +7,7 @@ FaceOff needs Python 3.12 or newer, and a way to run ANTs: ANTs itself on your P
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
-pip install faceoff
+pip install "git+https://github.com/srikash/FaceOff.git@v2.0.0"
 faceoff --help
 ```
 
@@ -16,7 +16,7 @@ faceoff --help
 ```bash
 conda create -n faceoff python=3.12
 conda activate faceoff
-pip install faceoff
+pip install "git+https://github.com/srikash/FaceOff.git@v2.0.0"
 faceoff --help
 ```
 
@@ -37,9 +37,31 @@ When `antsAI`, `antsRegistration`, `antsApplyTransforms`, and `ConvertTransformF
 
 To choose for yourself, use `--engine local` (your install, or an error naming the missing tools) or `--engine docker`.
 
+## The package name
+
+On PyPI the package will be called `faceoff-mri`, and `pip install faceoff-mri` will work once the first release is published. Until then, install from GitHub as above. Do not use `pip install faceoff`: that name belongs to a different program (a hockey app), and if you installed it, run `pip uninstall faceoff`.
+
+## The FaceOff container image
+
+A ready-made image has FaceOff and ANTs 2.6.5 inside, so you need nothing else but Docker or Apptainer. It is published with each release as `ghcr.io/srikash/faceoff`, for 64-bit Intel and AMD processors only (on an Apple-silicon Mac it runs under emulation, slowly).
+
+```bash
+cd /path/to/your/scans
+docker run --rm --init --user "$(id -u):$(id -g)" -v "$PWD":/data \
+    ghcr.io/srikash/faceoff:latest -i sub-01_T1w.nii.gz
+```
+
+The outputs appear next to the scan, owned by you. `--user` stops them being owned by root, and `--init` lets Ctrl-C and `docker stop` end the run cleanly. The folder you mount must be writable: FaceOff keeps its working files in a hidden folder beside the scan while it runs. With Apptainer or Singularity, from the folder with your scans:
+
+```bash
+apptainer run docker://ghcr.io/srikash/faceoff:latest -i sub-01_T1w.nii.gz
+```
+
+The image does not exist until the first release is published, and a new image on GitHub is private until its owner makes it public. To build it yourself from a checkout: `docker build -t faceoff .`
+
 ## The ANTs image
 
-You only need this without your own ANTs.
+You only need this without your own ANTs and without the FaceOff image above.
 
 FaceOff pulls `antsx/ants:2.6.5` the first time you run it. To fetch it in advance:
 
@@ -68,6 +90,6 @@ Inside the container, ANTs can read only the folders your files are in, and can 
 
 ## The template files
 
-They come with `pip install faceoff`. See [the template](template.md) for running from a checkout or using your own folder.
+They come with the installed package. See [the template](template.md) for running from a checkout or using your own folder.
 
 [Back to the README](../README.md)
