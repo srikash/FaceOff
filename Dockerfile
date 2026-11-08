@@ -1,25 +1,50 @@
-# Start from Ubuntu 18.04
-FROM ubuntu:18.04
+# syntax=docker/dockerfile:1
+#
+# FaceOff with ANTs inside: run it on a folder of scans without installing anything else.
+#
+#   docker run --rm --init --user "$(id -u):$(id -g)" -v "$PWD":/data ghcr.io/srikash/faceoff -i scan.nii.gz
+#
+# The image is amd64 only, because the ANTs image it takes ANTs from is.
 
-# Install required packages
-RUN apt-get update && \
-    apt-get install -y wget unzip
+# Keep in step with ANTS_IMAGE in faceoff/ants.py (a test checks this).
+ARG ANTS_IMAGE=antsx/ants:2.6.5
 
-# Download ANTs 2.4.3 and install it
-RUN wget https://github.com/ANTsX/ANTs/releases/download/v2.4.3/ants-2.4.3-ubuntu-18.04-X64-gcc.zip && \
-    unzip ants-2.4.3-ubuntu-18.04-X64-gcc.zip && \
-    rm ants-2.4.3-ubuntu-18.04-X64-gcc.zip && \
-    mv ants-2.4.3-ubuntu-18.04-X64-gcc /opt/ants && \
-    export ANTSPATH=/opt/ants/bin/
+FROM ghcr.io/astral-sh/uv:0.12.10 AS uv
 
-# Clone FaceOff repository and set it as the working directory
-RUN apt-get update && \
-    apt-get install -y git && \
-    git clone https://github.com/srikash/FaceOff.git /opt/FaceOff
-WORKDIR /opt/FaceOff
+# Take only what FaceOff runs from the ANTs image: the four tools and the libraries they load
+# (about 130 MB of the 340 MB in /opt/ants).
+FROM ${ANTS_IMAGE} AS ants
+RUN mkdir -p /ants/bin /ants/lib \
+    && for tool in antsAI antsRegistration antsApplyTransforms ConvertTransformFile; do \
+         cp "/opt/ants/bin/${tool}" /ants/bin/; \
+         ldd "/opt/ants/bin/${tool}" | awk '/=> \/opt\/ants/ {print $3}'; \
+       done | sort -u | xargs -I{} cp -L {} /ants/lib/
 
-# Set ANTs path in environment variables
-ENV ANTSPATH=/opt/ants/bin/
+FROM python:3.13-slim-bookworm AS builder
+COPY --from=uv /uv /uvx /bin/
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PROJECT_ENVIRONMENT=/opt/venv
+WORKDIR /src
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-dev --no-install-project
+# A normal (not editable) install builds the wheel, which downloads the five template files
+# from Zenodo and bundles them, so the image needs no download when it runs.
+COPY README.md LICENCE bundle_template.py ./
+COPY faceoff ./faceoff
+RUN uv sync --locked --no-dev --no-editable
 
-# Set entry point as FaceOff script
-ENTRYPOINT ["/opt/FaceOff/FaceOff"]
+# Same Debian release as the ANTs image, so its libraries match.
+FROM python:3.13-slim-bookworm
+LABEL org.opencontainers.image.title="FaceOff" \
+      org.opencontainers.image.description="Deface MRI scans with ANTs and a modified MNI152 template" \
+      org.opencontainers.image.source="https://github.com/srikash/FaceOff" \
+      org.opencontainers.image.licenses="MIT AND Apache-2.0"
+COPY --from=ants /ants /opt/ants
+COPY licences /usr/share/doc/faceoff/licences
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:/opt/ants/bin:${PATH}" \
+    LD_LIBRARY_PATH=/opt/ants/lib
+WORKDIR /data
+ENTRYPOINT ["faceoff"]

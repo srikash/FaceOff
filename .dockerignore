@@ -1,0 +1,11 @@
+# Allowlist: only what the build needs. testdata/ holds a real scan with a face and must never
+# end up in an image.
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!LICENCE
+!bundle_template.py
+!faceoff
+!licences
+**/__pycache__
