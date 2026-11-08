@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "faceoff"
+name = "faceoff-mri"  # the PyPI name "faceoff" belongs to another project; the command is still faceoff
 version = "1.9.8"
 description = "MRI defacing tool using ANTs registration (your own install, Docker, or Apptainer) to an MNI152 template"
 readme = "README.md"
@@ -38,7 +38,7 @@ path = "bundle_template.py"
 line-length = 100
 
 [tool.mypy]
-exclude = ["testdata/"]  # git-ignored scratch folder
+exclude = ["testdata/", "tempData/"]  # git-ignored scratch folders
 
 [[tool.mypy.overrides]]
 module = "hatchling.*"  # the build backend, not installed in the development environment

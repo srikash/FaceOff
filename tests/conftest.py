@@ -1,7 +1,13 @@
 """For the tests: a small synthetic template, and a stand-in registration that moves template
 images onto a scan with a known affine instead of running ANTs."""
 
+import os
 from pathlib import Path
+
+# Rich reads these when faceoff.messages is imported (just below); forced colour or a narrow
+# terminal would put escape codes and line breaks into the text the tests compare.
+for _name in ("FORCE_COLOR", "COLUMNS", "LINES"):
+    os.environ.pop(_name, None)
 
 import nibabel as nib
 import numpy as np

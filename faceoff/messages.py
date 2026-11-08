@@ -48,7 +48,7 @@ def format_elapsed(seconds: float) -> str:
 def package_version() -> str:
     """Return the installed FaceOff version, or "dev" when run from a source checkout."""
     try:
-        return version("faceoff")
+        return version("faceoff-mri")
     except PackageNotFoundError:
         return "dev"
 

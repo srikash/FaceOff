@@ -31,3 +31,10 @@ def test_console_reporter_prints_settings_steps_and_files(monkeypatch, tmp_path)
     for name in ("scan_defaced.nii.gz", "scan_tal_refaced.nii.gz", "scan_txn-to-tal_fsl.mat"):
         assert f"✓ {name}" in text
     assert "✓ scan_faceoff_qc.html" not in text
+
+
+def test_the_version_comes_from_the_faceoff_mri_distribution(monkeypatch):
+    asked = []
+    monkeypatch.setattr(messages, "version", lambda name: asked.append(name) or "9.9.9")
+    assert messages.package_version() == "9.9.9"
+    assert asked == ["faceoff-mri"]  # "faceoff" on PyPI is another project

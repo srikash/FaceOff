@@ -6,3 +6,4 @@ testdata/
 HANDOFF.md
 registration_review/
 *.sif
+.venv/
