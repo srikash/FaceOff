@@ -9,7 +9,7 @@
 # Keep in step with ANTS_IMAGE in faceoff/ants.py (a test checks this).
 ARG ANTS_IMAGE=antsx/ants:2.6.5
 
-FROM ghcr.io/astral-sh/uv:0.12.10 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.7 AS uv
 
 # Take only what FaceOff runs from the ANTs image: the four tools and the libraries they load
 # (about 130 MB of the 340 MB in /opt/ants).
