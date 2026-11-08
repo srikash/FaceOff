@@ -6,7 +6,8 @@ from pathlib import Path
 
 # Rich reads these when faceoff.messages is imported (just below); forced colour or a narrow
 # terminal would put escape codes and line breaks into the text the tests compare.
-for _name in ("FORCE_COLOR", "COLUMNS", "LINES"):
+# (rich-click also forces colour when GITHUB_ACTIONS or PY_COLORS is set, as on GitHub Actions.)
+for _name in ("FORCE_COLOR", "PY_COLORS", "GITHUB_ACTIONS", "COLUMNS", "LINES"):
     os.environ.pop(_name, None)
 
 import nibabel as nib
