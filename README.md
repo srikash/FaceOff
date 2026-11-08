@@ -18,7 +18,7 @@ Deface anatomical MRI scans with ANTs. FaceOff removes the face, and the eyes if
 You need Python 3.12 or newer, and ANTs (2.3.3 or newer, tested with 2.6.5) on your PATH, Docker, or Apptainer (or Singularity).
 
 ```bash
-pip install "git+https://github.com/srikash/FaceOff.git@v2.0.0"
+pip install "git+https://github.com/srikash/FaceOff.git"
 faceoff --help
 ```
 

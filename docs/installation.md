@@ -7,7 +7,7 @@ FaceOff needs Python 3.12 or newer, and a way to run ANTs: ANTs itself on your P
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
-pip install "git+https://github.com/srikash/FaceOff.git@v2.0.0"
+pip install "git+https://github.com/srikash/FaceOff.git"
 faceoff --help
 ```
 
@@ -16,7 +16,7 @@ faceoff --help
 ```bash
 conda create -n faceoff python=3.12
 conda activate faceoff
-pip install "git+https://github.com/srikash/FaceOff.git@v2.0.0"
+pip install "git+https://github.com/srikash/FaceOff.git"
 faceoff --help
 ```
 

@@ -83,18 +83,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Push the image that was just checked, not a second build of it.
       - name: Push
         if: github.ref_type == 'tag'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64
-          push: true
-          provenance: false
-          cache-from: type=gha
-          tags: |
-            ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
-            ${{ env.IMAGE }}:latest
+        run: |
+          for tag in "${{ steps.version.outputs.version }}" latest; do
+            docker tag faceoff:check "${IMAGE}:${tag}"
+            docker push "${IMAGE}:${tag}"
+          done
 
   singularity:
     name: Build and push the Apptainer/Singularity image
@@ -116,6 +112,10 @@ jobs:
             oras://ghcr.io
 
       - name: Build the SIF from the published Docker image
+        # Needed while the GHCR package is still private (the first release).
+        env:
+          APPTAINER_DOCKER_USERNAME: ${{ github.actor }}
+          APPTAINER_DOCKER_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
           apptainer build faceoff.sif \
             docker://${{ env.IMAGE }}:${{ needs.docker.outputs.version }}
