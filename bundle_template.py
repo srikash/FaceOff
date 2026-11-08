@@ -21,7 +21,9 @@ class TemplateBuildHook(BuildHookInterface):
 
     def initialize(self, version: str, build_data: dict) -> None:
         """Download the template files into faceoff/data before the package is built."""
-        if self.target_name != "wheel":
+        # An editable install (a development checkout, or CI) uses the template download on first
+        # use instead, so that every install does not fetch 9 MB.
+        if self.target_name != "wheel" or version == "editable":
             return
         root = Path(self.root)
         sys.path.insert(0, str(root))

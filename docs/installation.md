@@ -54,8 +54,10 @@ docker run --rm --init --user "$(id -u):$(id -g)" -v "$PWD":/data \
 The outputs appear next to the scan, owned by you. `--user` stops them being owned by root, and `--init` lets Ctrl-C and `docker stop` end the run cleanly. The folder you mount must be writable: FaceOff keeps its working files in a hidden folder beside the scan while it runs. With Apptainer or Singularity, from the folder with your scans:
 
 ```bash
-apptainer run docker://ghcr.io/srikash/faceoff:latest -i sub-01_T1w.nii.gz
+apptainer run --cleanenv docker://ghcr.io/srikash/faceoff:latest -i sub-01_T1w.nii.gz
 ```
+
+`--cleanenv` keeps your own `PATH` and library settings out of the container. Each release also has the image as an Apptainer file, which you can download once and reuse: `apptainer pull faceoff.sif oras://ghcr.io/srikash/faceoff:<version>-sif`, then `apptainer run --cleanenv faceoff.sif -i sub-01_T1w.nii.gz`.
 
 The image does not exist until the first release is published, and a new image on GitHub is private until its owner makes it public. To build it yourself from a checkout: `docker build -t faceoff .`
 

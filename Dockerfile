@@ -14,11 +14,15 @@ FROM ghcr.io/astral-sh/uv:0.12.10 AS uv
 # Take only what FaceOff runs from the ANTs image: the four tools and the libraries they load
 # (about 130 MB of the 340 MB in /opt/ants).
 FROM ${ANTS_IMAGE} AS ants
-RUN mkdir -p /ants/bin /ants/lib \
-    && for tool in antsAI antsRegistration antsApplyTransforms ConvertTransformFile; do \
-         cp "/opt/ants/bin/${tool}" /ants/bin/; \
-         ldd "/opt/ants/bin/${tool}" | awk '/=> \/opt\/ants/ {print $3}'; \
-       done | sort -u | xargs -I{} cp -L {} /ants/lib/
+RUN set -eu; \
+    mkdir -p /ants/bin /ants/lib; \
+    for tool in antsAI antsRegistration antsApplyTransforms ConvertTransformFile; do \
+        cp "/opt/ants/bin/${tool}" /ants/bin/; \
+        ldd "/opt/ants/bin/${tool}" | awk '/=> \/opt\/ants/ {print $3}' >> /tmp/libs.txt; \
+    done; \
+    test -s /tmp/libs.txt; \
+    sort -u /tmp/libs.txt | xargs -I{} cp -L {} /ants/lib/; \
+    test "$(ls /ants/lib | wc -l)" -gt 20
 
 FROM python:3.13-slim-bookworm AS builder
 COPY --from=uv /uv /uvx /bin/
@@ -44,6 +48,9 @@ LABEL org.opencontainers.image.title="FaceOff" \
 COPY --from=ants /ants /opt/ants
 COPY licences /usr/share/doc/faceoff/licences
 COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /src/faceoff/COPYING-MNI /usr/share/doc/faceoff/licences/MNI-COPYING.txt
+# The copied libraries are all ITK's and ANTs' own (libitk*-5.4), none named like a system
+# library, so putting their folder on the library path cannot shadow Python's.
 ENV PATH="/opt/venv/bin:/opt/ants/bin:${PATH}" \
     LD_LIBRARY_PATH=/opt/ants/lib
 WORKDIR /data

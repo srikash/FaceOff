@@ -68,6 +68,7 @@ jobs:
           assert "site-packages" in str(folder) and is_complete(folder), folder'
           scans="$(docker run --rm --entrypoint sh faceoff:check -c "find / -xdev \( -name '*.nii' -o -name '*.nii.gz' \) -not -path '*/nibabel/tests/*'" | wc -l)"
           test "${scans}" -eq 5 || { echo "Expected only the 5 template files, found ${scans} images." >&2; exit 1; }
+          docker run --rm --entrypoint antsRegistration faceoff:check --version | grep -F "ANTs Version"
           # Every ANTs tool FaceOff runs is there and finds all its libraries.
           docker run --rm --entrypoint sh faceoff:check -c '
           for t in antsAI antsRegistration antsApplyTransforms ConvertTransformFile; do
@@ -105,11 +106,12 @@ jobs:
         uses: eWaterCycle/setup-apptainer@v2
 
       - name: Log in to GHCR
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          apptainer registry login \
-            --username "${{ github.actor }}" \
-            --password "${{ secrets.GITHUB_TOKEN }}" \
-            oras://ghcr.io
+          printf '%s' "${GHCR_TOKEN}" | apptainer registry login \
+            --username "${GHCR_USER}" --password-stdin oras://ghcr.io
 
       - name: Build the SIF from the published Docker image
         # Needed while the GHCR package is still private (the first release).
