@@ -11,7 +11,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Only pull requests are cancelled by a newer push; a run on master may be tagging a release.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   quality:
@@ -89,3 +90,35 @@ jobs:
           assert "site-packages" in str(folder), folder
           assert is_complete(folder), folder
           PY
+
+  tag-release:
+    name: Tag a version bump
+    # A new version in pyproject.toml, merged to master and green, is released: the tag starts
+    # the image, the GitHub release (which Zenodo archives) and PyPI.
+    needs: [quality, test, package]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Tag and start the release workflows if pyproject.toml's version is new
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          tag="v${version}"
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            echo "Tag ${tag} already exists; nothing to do."
+            exit 0
+          fi
+          git tag "${tag}"
+          git push origin "${tag}"
+          # A tag pushed with the default token does not start other workflows'
+          # `on: push: tags` (GitHub's safeguard against loops), so start them explicitly.
+          gh workflow run release.yml --ref "${tag}"
+          gh workflow run container.yml --ref "${tag}"

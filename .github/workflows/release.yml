@@ -75,9 +75,8 @@ jobs:
 
   pypi:
     name: Publish to PyPI
-    # Off until the one-time PyPI setup is done and the repository variable
-    # PUBLISH_TO_PYPI is set to "true" (docs/development.md).
-    if: github.ref_type == 'tag' && vars.PUBLISH_TO_PYPI == 'true'
+    # Needs the trusted publisher and the pypi environment (docs/development.md).
+    if: github.ref_type == 'tag'
     needs: build
     runs-on: ubuntu-latest
     environment: pypi

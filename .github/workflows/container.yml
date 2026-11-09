@@ -92,37 +92,3 @@ jobs:
             docker tag faceoff:check "${IMAGE}:${tag}"
             docker push "${IMAGE}:${tag}"
           done
-
-  singularity:
-    name: Build and push the Apptainer/Singularity image
-    if: github.ref_type == 'tag'
-    needs: docker
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Install Apptainer
-        uses: eWaterCycle/setup-apptainer@v2
-
-      - name: Log in to GHCR
-        env:
-          GHCR_USER: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          printf '%s' "${GHCR_TOKEN}" | apptainer registry login \
-            --username "${GHCR_USER}" --password-stdin oras://ghcr.io
-
-      - name: Build the SIF from the published Docker image
-        # Needed while the GHCR package is still private (the first release).
-        env:
-          APPTAINER_DOCKER_USERNAME: ${{ github.actor }}
-          APPTAINER_DOCKER_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          apptainer build faceoff.sif \
-            docker://${{ env.IMAGE }}:${{ needs.docker.outputs.version }}
-
-      - name: Push the SIF to GHCR
-        run: |
-          apptainer push faceoff.sif \
-            oras://${{ env.IMAGE }}:${{ needs.docker.outputs.version }}-sif
