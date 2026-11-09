@@ -90,7 +90,7 @@ wheels = [
 
 [[package]]
 name = "faceoff-mri"
-version = "1.9.8"
+version = "1.9.8.post1"
 source = { editable = "." }
 dependencies = [
     { name = "click" },

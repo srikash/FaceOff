@@ -45,7 +45,7 @@ The package on PyPI is `faceoff-mri`; the command it installs is `faceoff`. Do n
 
 ## The FaceOff container image
 
-A ready-made image has FaceOff and ANTs 2.6.5 inside, so you need nothing else but Docker or Apptainer. It is published with each release as `ghcr.io/srikash/faceoff` (a public package, with the tags `latest` and the version, such as `1.9.8`), for 64-bit Intel and AMD processors only (on an Apple-silicon Mac it runs under emulation, slowly).
+A ready-made image has FaceOff and ANTs 2.6.5 inside, so you need nothing else but Docker or Apptainer. It is published with each release as `ghcr.io/srikash/faceoff` (a public package, with the tags `latest` and the version, such as `1.9.8.post1`), for 64-bit Intel and AMD processors only (on an Apple-silicon Mac it runs under emulation, slowly).
 
 ```bash
 cd /path/to/your/scans

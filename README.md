@@ -1,4 +1,4 @@
-# FaceOff [![Version](https://img.shields.io/badge/version-1.9.8-purple.svg)](https://github.com/srikash/FaceOff/releases/tag/v1.9.8) [![Licence](https://img.shields.io/badge/licence-MIT-orange.svg)](https://github.com/srikash/FaceOff/blob/master/LICENCE) [![DOI](https://zenodo.org/badge/307797054.svg)](https://zenodo.org/badge/latestdoi/307797054)
+# FaceOff [![Version](https://img.shields.io/badge/version-1.9.8.post1-purple.svg)](https://github.com/srikash/FaceOff/releases/tag/v1.9.8.post1) [![Licence](https://img.shields.io/badge/licence-MIT-orange.svg)](https://github.com/srikash/FaceOff/blob/master/LICENCE) [![DOI](https://zenodo.org/badge/307797054.svg)](https://zenodo.org/badge/latestdoi/307797054)
 
 Deface anatomical MRI scans with ANTs. FaceOff removes the face, and the eyes if you ask, and can put the template's face and eyes back.
 
@@ -33,7 +33,7 @@ docker run --rm --init --user "$(id -u):$(id -g)" -v "$PWD":/data \
 apptainer run --cleanenv docker://ghcr.io/srikash/faceoff:latest -i sub-01_T1w.nii.gz
 ```
 
-Use a version such as `ghcr.io/srikash/faceoff:1.9.8` in place of `latest` to get the same result every time. Conda, clusters, and the development version: [docs/installation.md](https://github.com/srikash/FaceOff/blob/master/docs/installation.md).
+Use a version such as `ghcr.io/srikash/faceoff:1.9.8.post1` in place of `latest` to get the same result every time. Conda, clusters, and the development version: [docs/installation.md](https://github.com/srikash/FaceOff/blob/master/docs/installation.md).
 
 ## Quick start
 
