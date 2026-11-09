@@ -7,7 +7,7 @@ FaceOff needs Python 3.12 or newer, and a way to run ANTs: ANTs itself on your P
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
-pip install "git+https://github.com/srikash/FaceOff.git"
+pip install faceoff-mri
 faceoff --help
 ```
 
@@ -16,11 +16,13 @@ faceoff --help
 ```bash
 conda create -n faceoff python=3.12
 conda activate faceoff
-pip install "git+https://github.com/srikash/FaceOff.git"
+pip install faceoff-mri
 faceoff --help
 ```
 
-## From a source checkout
+## The development version, or a source checkout
+
+For the newest code on GitHub instead of the last release: `pip install "git+https://github.com/srikash/FaceOff.git"`. From a checkout:
 
 ```bash
 git clone https://github.com/srikash/FaceOff.git
@@ -39,11 +41,11 @@ To choose for yourself, use `--engine local` (your install, or an error naming t
 
 ## The package name
 
-On PyPI the package will be called `faceoff-mri`, and `pip install faceoff-mri` will work once the first release is published. Until then, install from GitHub as above. Do not use `pip install faceoff`: that name belongs to a different program (a hockey app), and if you installed it, run `pip uninstall faceoff`.
+The package on PyPI is `faceoff-mri`; the command it installs is `faceoff`. Do not use `pip install faceoff`: that name belongs to a different program (a hockey app), and its files go in the same `faceoff` folder as FaceOff's, so they overwrite each other. If `pip show faceoff` finds anything, run `pip uninstall faceoff` first.
 
 ## The FaceOff container image
 
-A ready-made image has FaceOff and ANTs 2.6.5 inside, so you need nothing else but Docker or Apptainer. It is published with each release as `ghcr.io/srikash/faceoff`, for 64-bit Intel and AMD processors only (on an Apple-silicon Mac it runs under emulation, slowly).
+A ready-made image has FaceOff and ANTs 2.6.5 inside, so you need nothing else but Docker or Apptainer. It is published with each release as `ghcr.io/srikash/faceoff` (a public package, with the tags `latest` and the version, such as `1.9.8`), for 64-bit Intel and AMD processors only (on an Apple-silicon Mac it runs under emulation, slowly).
 
 ```bash
 cd /path/to/your/scans
@@ -59,7 +61,7 @@ apptainer run --cleanenv docker://ghcr.io/srikash/faceoff:latest -i sub-01_T1w.n
 
 `--cleanenv` keeps your own `PATH` and library settings out of the container. Apptainer converts the Docker image itself, so there is no separate file to download: `apptainer pull faceoff.sif docker://ghcr.io/srikash/faceoff:<version>`, then `apptainer run --cleanenv faceoff.sif -i sub-01_T1w.nii.gz`.
 
-The image does not exist until the first release is published, and a new image on GitHub is private until its owner makes it public. To build it yourself from a checkout: `docker build -t faceoff .`
+To build it yourself from a checkout: `docker build -t faceoff .`
 
 ## The ANTs image
 

@@ -19,6 +19,13 @@ dependencies = [
     "pillow>=10",
 ]
 
+[project.urls]
+Homepage = "https://github.com/srikash/FaceOff"
+Documentation = "https://github.com/srikash/FaceOff/blob/master/docs/usage.md"
+Source = "https://github.com/srikash/FaceOff"
+Issues = "https://github.com/srikash/FaceOff/issues"
+Citation = "https://github.com/srikash/FaceOff/blob/master/docs/citation.md"
+
 [project.scripts]
 faceoff = "faceoff.cli:cli"
 FaceOff = "faceoff.cli:cli"

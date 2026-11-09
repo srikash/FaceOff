@@ -1,11 +1,11 @@
-# FaceOff [![Version](https://img.shields.io/badge/version-1.9.8-purple.svg)](https://github.com/srikash/FaceOff/releases/tag/v1.9.8) [![Licence](https://img.shields.io/badge/licence-MIT-orange.svg)](LICENCE) [![DOI](https://zenodo.org/badge/307797054.svg)](https://zenodo.org/badge/latestdoi/307797054)
+# FaceOff [![Version](https://img.shields.io/badge/version-1.9.8-purple.svg)](https://github.com/srikash/FaceOff/releases/tag/v1.9.8) [![Licence](https://img.shields.io/badge/licence-MIT-orange.svg)](https://github.com/srikash/FaceOff/blob/master/LICENCE) [![DOI](https://zenodo.org/badge/307797054.svg)](https://zenodo.org/badge/latestdoi/307797054)
 
 Deface anatomical MRI scans with ANTs. FaceOff removes the face, and the eyes if you ask, and can put the template's face and eyes back.
 
 - Reorients to template orientation and crops in the same run, with no interpolation.
 - `--extra-images` (MP2RAGE, GRE echoes) and `--batch` (many scans).
 - A QC page with every run.
-- ANTs from your PATH, Docker, or Apptainer.
+- ANTs from your PATH, Docker, or Apptainer, or a ready-made container image with ANTs inside.
 
 <p align="center">
   <img src="https://gitlab.com/skash/images-and-gifs/-/raw/master/face-off/faceoff.gif" alt="Face swap scene from the film Face/Off">
@@ -15,18 +15,25 @@ Deface anatomical MRI scans with ANTs. FaceOff removes the face, and the eyes if
 
 ## Install
 
-You need Python 3.12 or newer, and ANTs (2.3.3 or newer, tested with 2.6.5) on your PATH, Docker, or Apptainer (or Singularity).
-
 ```bash
-pip install "git+https://github.com/srikash/FaceOff.git"
+pip install faceoff-mri
 faceoff --help
 ```
 
-The package will be called `faceoff-mri` on PyPI; `pip install faceoff-mri` works once the first release is published. The name `faceoff` on PyPI is a different program, so if you ran `pip install faceoff` earlier, run `pip uninstall faceoff` first.
+You need Python 3.12 or newer, and a way to run ANTs: ANTs 2.3.3 or newer on your PATH (tested with 2.6.5), or Docker, or Apptainer (or Singularity). The command is `faceoff`; the package is `faceoff-mri` because the name `faceoff` on PyPI belongs to a different program. If `pip show faceoff` finds anything (an older FaceOff, or an unrelated program), run `pip uninstall faceoff` first, because both use the same folder name.
 
-A container image with ANTs inside is described in [docs/installation.md](docs/installation.md).
+**Or use the container image**, which has ANTs and the template inside, so you need only Docker or Apptainer. It is for 64-bit Intel and AMD processors.
 
-Conda, clusters, and Apptainer: [docs/installation.md](docs/installation.md).
+```bash
+cd /path/to/your/scans
+docker run --rm --init --user "$(id -u):$(id -g)" -v "$PWD":/data \
+    ghcr.io/srikash/faceoff:latest -i sub-01_T1w.nii.gz
+
+# Apptainer or Singularity, from the folder with your scans
+apptainer run --cleanenv docker://ghcr.io/srikash/faceoff:latest -i sub-01_T1w.nii.gz
+```
+
+Use a version such as `ghcr.io/srikash/faceoff:1.9.8` in place of `latest` to get the same result every time. Conda, clusters, and the development version: [docs/installation.md](https://github.com/srikash/FaceOff/blob/master/docs/installation.md).
 
 ## Quick start
 
@@ -39,11 +46,11 @@ faceoff --batch sub-*_T1w.nii.gz                # several scans, one after anoth
 faceoff -i sub-01_UNIT1.nii.gz --extra-images sub-01_inv-*_MP2RAGE.nii.gz   # MP2RAGE or GRE echoes
 ```
 
-Outputs go next to the input: [docs/outputs.md](docs/outputs.md).
+Outputs go next to the input: [docs/outputs.md](https://github.com/srikash/FaceOff/blob/master/docs/outputs.md).
 
 ## Example outputs
 
-![Sagittal sweep of FaceOff's outputs: defaced, with the eyes removed, refaced, and refaced with the template's eyes](docs/images/faceoff_examples.gif)
+![Sagittal sweep of FaceOff's outputs: defaced, with the eyes removed, refaced, and refaced with the template's eyes](https://raw.githubusercontent.com/srikash/FaceOff/master/docs/images/faceoff_examples.gif)
 
 The template's face and eyes are shown in turbo.
 
@@ -58,14 +65,14 @@ FaceOff, [pydeface](https://github.com/poldracklab/pydeface) 2.1.0, and AFNI's `
 | Remove the eyes | **47 s** (`--enucleate`)<br>**59 s** with `--reface` | not available | not available |
 
 - Median of 3 runs. FaceOff's reorientation to template orientation comes for free, with no interpolation.
-- [Results](docs/results.md): the three tools' outputs side by side.
+- [Results](https://github.com/srikash/FaceOff/blob/master/docs/results.md): the three tools' outputs side by side.
 
 **Planned:** an option to use AFNI's refacer template and shell in place of FaceOff's own template.
 
 ## More
 
-[Installation](docs/installation.md) · [Usage](docs/usage.md) · [Outputs](docs/outputs.md) · [Results](docs/results.md) · [Template](docs/template.md) · [Development](docs/development.md) · [Citation](docs/citation.md)
+[Installation](https://github.com/srikash/FaceOff/blob/master/docs/installation.md) · [Usage](https://github.com/srikash/FaceOff/blob/master/docs/usage.md) · [Outputs](https://github.com/srikash/FaceOff/blob/master/docs/outputs.md) · [Results](https://github.com/srikash/FaceOff/blob/master/docs/results.md) · [Template](https://github.com/srikash/FaceOff/blob/master/docs/template.md) · [Development](https://github.com/srikash/FaceOff/blob/master/docs/development.md) · [Citation](https://github.com/srikash/FaceOff/blob/master/docs/citation.md)
 
 ## Licence and citation
 
-MIT licence; the template files keep the [MNI licence](faceoff/COPYING-MNI). If you use FaceOff, please cite it, the MNI ICBM152 template, and ANTs: [docs/citation.md](docs/citation.md).
+MIT licence; the template files keep the [MNI licence](https://github.com/srikash/FaceOff/blob/master/faceoff/COPYING-MNI). If you use FaceOff, please cite it, the MNI ICBM152 template, and ANTs: [docs/citation.md](https://github.com/srikash/FaceOff/blob/master/docs/citation.md).
