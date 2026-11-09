@@ -116,6 +116,12 @@ jobs:
             echo "Tag ${tag} already exists; nothing to do."
             exit 0
           fi
+          # A version below an existing tag is a mistake (a revert, a typo), not a release.
+          latest="$(git tag --list 'v*' | sort -V | tail -n 1)"
+          if [[ -n "${latest}" && "$(printf '%s\n%s\n' "${latest}" "${tag}" | sort -V | tail -n 1)" != "${tag}" ]]; then
+            echo "Version ${version} is lower than the existing tag ${latest}; not tagging." >&2
+            exit 1
+          fi
           git tag "${tag}"
           git push origin "${tag}"
           # A tag pushed with the default token does not start other workflows'
